@@ -2,7 +2,6 @@ package memcached
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 
@@ -13,22 +12,21 @@ import (
 )
 
 type Conn struct {
-	*bufio.Reader
+	reader
 	*bufio.Writer
 	closer      io.Closer
 	log         log.Logger
 	handler     Handler
 	maxItemSize int
-	pool        recycle.Pool
 }
 
-func NewConn(conn io.ReadWriteCloser, h Handler, log log.Logger) *Conn {
+func NewConn(conn io.ReadWriteCloser, h Handler, pool *recycle.Pool, log log.Logger) *Conn {
 	return &Conn{
-		Reader:  bufio.NewReaderSize(conn, MaxCommandLength),
-		Writer:  bufio.NewWriter(conn),
+		reader:  newReader(conn, pool),
+		Writer:  bufio.NewWriterSize(conn, OutBufferSize),
 		closer:  conn,
-		log:     log,
 		handler: h,
+		log:     log,
 	}
 }
 
@@ -101,6 +99,7 @@ func (c *Conn) get(fields [][]byte) (clientErr, err error) {
 	views := c.handler.Get(fields...)
 	var readerIndex int
 	defer func() {
+		// Close readers which was not successfully readed.
 		for ; readerIndex < len(views); readerIndex++ {
 			views[readerIndex].Reader.Close()
 		}
@@ -136,7 +135,7 @@ func (c *Conn) set(fields [][]byte) (clientErr, err error) {
 		return
 	}
 
-	i.data, clientErr, err = c.readItemData(i.bytes)
+	i.data, clientErr, err = c.readDataBlock(i.bytes)
 	if err != nil || clientErr != nil {
 		return
 	}
@@ -173,66 +172,6 @@ func (c *Conn) delete(fields [][]byte) (clientErr, err error) {
 	return
 }
 
-var separatorBytes = []byte(Separator)
-
-// WARN: retuned byte slices points into read buffed and invalidated after next read.
-func (c *Conn) readCommand() (command []byte, fields [][]byte, clientErr, err error) {
-	var lineWithSeparator []byte
-	// We accept only "\r\n" separator, so can't use ReadLine here.
-	lineWithSeparator, err = c.ReadSlice('\n')
-	if err == bufio.ErrBufferFull {
-		// Too big command.
-		clientErr = stackerr.Wrap(ErrTooBigCommand)
-		err = c.discardCommand()
-		return
-	}
-	if err == io.EOF {
-		if len(lineWithSeparator) != 0 {
-			err = stackerr.Wrap(io.ErrUnexpectedEOF)
-		}
-		return
-	}
-	if err != nil {
-		err = stackerr.Wrap(err)
-		return
-	}
-
-	if !bytes.HasSuffix(lineWithSeparator, separatorBytes) {
-		clientErr = stackerr.Wrap(ErrInvalidLineSeparator)
-		return
-	}
-	line := bytes.TrimSuffix(lineWithSeparator, separatorBytes)
-	split := bytes.Fields(line)
-	if len(split) == 0 {
-		clientErr = stackerr.Wrap(ErrEmptyCommand)
-		return
-	}
-	command = split[0]
-	fields = split[1:]
-	return
-}
-
-func (c *Conn) readItemData(size int) (data *recycle.Data, clientErr, err error) {
-	data, err = c.pool.ReadData(c, size)
-	if err != nil {
-		err = stackerr.Wrap(err)
-		return
-	}
-	defer func() {
-		if data != nil && (clientErr != nil || err != nil) {
-			data.Recycle()
-			data = nil
-		}
-	}()
-	var sep []byte
-	sep, err = c.ReadSlice('\n')
-	err = stackerr.Wrap(err)
-	if err == nil && !bytes.Equal(sep, separatorBytes) {
-		clientErr = stackerr.Wrap(ErrInvalidLineSeparator)
-	}
-	return
-}
-
 func (c *Conn) serverError(err error) {
 	c.log.Error("Server error: ", err)
 	if err == io.ErrUnexpectedEOF {
@@ -252,20 +191,6 @@ func (c *Conn) sendResponse(res string) error {
 	c.WriteString(res)
 	c.WriteString(Separator)
 	return c.Flush()
-}
-
-// discardCommand discard all input untill next separator.
-func (c *Conn) discardCommand() error {
-	for {
-		lineWithSeparator, err := c.ReadSlice('\n')
-		if err == bufio.ErrBufferFull {
-			continue
-		}
-		if !bytes.HasSuffix(lineWithSeparator, separatorBytes) {
-			continue
-		}
-		return nil
-	}
 }
 
 func (c *Conn) Flush() error {

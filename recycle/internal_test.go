@@ -72,13 +72,14 @@ var _ = Describe("chunk requested", func() {
 		})
 	}
 	AssertChunkReturnsAfterRecycle := func() {
-		if !RaceEnabled {
-			It("it returns after recycle", func() {
-				p.recycleChunk(chunk)
-				Expect(p.chunk(chunkSize)).To(Equal(chunk))
-				Expect(chunk).To(Equal(chunkCopy))
-			})
-		}
+		It("it returns after recycle", func() {
+			if RaceEnabled {
+				Skip("no pooling happens when race detector is on")
+			}
+			p.recycleChunk(chunk)
+			Expect(p.chunk(chunkSize)).To(Equal(chunk))
+			Expect(chunk).To(Equal(chunkCopy))
+		})
 	}
 
 	Context("size is few less than max", func() {
@@ -188,13 +189,18 @@ var _ = Describe("data read", func() {
 			})
 		})
 
+		Context("read access after recycle", func() {
+			It("panic", func() {
+				data.Recycle()
+				Expect(func() { data.NewReader() }).To(Panic())
+			})
+		})
+
 		Context("leak callback set", func() {
-			var leak chan struct{}
+			var leak chan *Data
 			BeforeEach(func() {
-				leak = make(chan struct{})
-				p.SetLeakCallback(func(d *Data) {
-					leak <- struct{}{}
-				})
+				leak = make(chan *Data)
+				p.SetLeakCallback(NotifyOnLeakCallback(leak))
 			})
 
 			gcData := func() {

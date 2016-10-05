@@ -13,7 +13,7 @@ type Handler interface {
 
 func NewHandler() {
 	pool := recycle.NewPool()
-	if pool.MaxChunkSize() < MaxCommandLength {
+	if pool.MaxChunkSize() < MaxCommandSize {
 		// Required for zero copy read large enough item data.
 		panic("max chunk size should not be less than input buffer")
 	}

@@ -6,10 +6,20 @@ import (
 	"io"
 	"runtime"
 	"sync"
+	"time"
 )
 
-var DefaultChunkSizes = []int{1 << 7, 1 << 8, 1 << 9, 1 << 10, 1 << 11, 1 << 12, 1 << 13}
+const minDefChunkSize = 1 << 7
+const maxDefChunkSize = 1 << 20
 
+var DefaultChunkSizes = func() (sz []int) {
+	for chSz := minDefChunkSize; chSz <= maxDefChunkSize; chSz *= 2 {
+		sz = append(sz, chSz)
+	}
+	return
+}()
+
+// TODO bench for performance and allocations. Single and concurrent.
 type Pool struct {
 	leakCallback LeakCallback
 	chunkSizes   []int
@@ -70,15 +80,25 @@ func (p *Pool) ReadData(r io.Reader, size int) (*Data, error) {
 type LeakCallback func(*Data)
 
 // SetLeakCallback sets callback, which is called before GC of not recycled data.
-// Note: this is for debug purpose only.
+// Note: this is for test and debug purpose only.
 func (p *Pool) SetLeakCallback(cb LeakCallback) {
 	p.leakCallback = cb
 }
 
-var PanicLeakCallback LeakCallback = func(d *Data) {
+func NotifyOnLeakCallback(leak chan<- *Data) LeakCallback {
+	return func(d *Data) {
+		select {
+		case leak <- d:
+		case <-time.After(5 * time.Second):
+			panic("Nobody is listening for leak notification")
+		}
+	}
+}
+
+var PanicOnLeakCallback LeakCallback = func(d *Data) {
 	panic(fmt.Sprintf("recycle.Data leaked: %#v.", d))
 }
-var WarnLeakCallback LeakCallback = func(d *Data) {
+var WarnOnLeakCallback LeakCallback = func(d *Data) {
 	println("WARN: recycle.Data leaked.")
 }
 

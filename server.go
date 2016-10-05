@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/skipor/memcached/log"
+	"github.com/skipor/memcached/recycle"
 )
 
 type Server struct {
 	Handler Handler
 	Addr    string
 	Log     log.Logger
+	Pool    *recycle.Pool
 }
 
 func (s *Server) ListenAndServe() error {
@@ -29,6 +31,9 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) Serve(l net.Listener) error {
 	if s.Log == nil {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
+	}
+	if s.Pool == nil {
+		s.Pool = recycle.NewPool()
 	}
 	var tempDelay time.Duration // How long to sleep on accept failure.
 	for {
@@ -51,7 +56,7 @@ func (s *Server) Serve(l net.Listener) error {
 			continue
 		}
 		tempDelay = 0
-		c := NewConn(conn, s.Handler, s.Log)
+		c := NewConn(conn, s.Handler, s.Pool, s.Log)
 		go c.Serve()
 	}
 }
