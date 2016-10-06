@@ -85,7 +85,7 @@ func (p *Pool) SetLeakCallback(cb LeakCallback) {
 	p.leakCallback = cb
 }
 
-func NotifyOnLeakCallback(leak chan<- *Data) LeakCallback {
+func NotifyOnLeak(leak chan<- *Data) LeakCallback {
 	return func(d *Data) {
 		select {
 		case leak <- d:
@@ -95,10 +95,10 @@ func NotifyOnLeakCallback(leak chan<- *Data) LeakCallback {
 	}
 }
 
-var PanicOnLeakCallback LeakCallback = func(d *Data) {
+var PanicOnLeak LeakCallback = func(d *Data) {
 	panic(fmt.Sprintf("recycle.Data leaked: %#v.", d))
 }
-var WarnOnLeakCallback LeakCallback = func(d *Data) {
+var WarnOnLeak LeakCallback = func(d *Data) {
 	println("WARN: recycle.Data leaked.")
 }
 

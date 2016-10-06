@@ -200,7 +200,7 @@ var _ = Describe("data read", func() {
 			var leak chan *Data
 			BeforeEach(func() {
 				leak = make(chan *Data)
-				p.SetLeakCallback(NotifyOnLeakCallback(leak))
+				p.SetLeakCallback(NotifyOnLeak(leak))
 			})
 
 			gcData := func() {

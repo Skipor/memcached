@@ -3,11 +3,16 @@ package memcached
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"math"
+	"runtime"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"github.com/skipor/memcached/mocks"
 	"github.com/skipor/memcached/recycle"
 	"github.com/stretchr/testify/mock"
@@ -21,7 +26,7 @@ var _ = Describe("reader", func() {
 		fields         [][]byte
 		clientErr, err error
 	)
-	ReadCommand := func() {
+	ReadCmd := func() {
 		command, fields, clientErr, err = r.readCommand()
 	}
 
@@ -34,13 +39,13 @@ var _ = Describe("reader", func() {
 		Expect(err).To(BeNil())
 	}
 	ExpectCommandReaded := func() {
-		ReadCommand()
+		ReadCmd()
 		ExpectNoErrors()
 		Expect(command).To(Equal(expectedCommand))
 		Expect(fields).To(Equal(expectedFields))
 	}
-	ExpectErr := func(expectedErr error) {
-		ReadCommand()
+	ExpectReadCmdErr := func(expectedErr error) {
+		ReadCmd()
 		Expect(unwrap(err)).To(Equal(expectedErr))
 		Expect(command).To(BeNil())
 		Expect(fields).To(BeNil())
@@ -67,7 +72,7 @@ var _ = Describe("reader", func() {
 				for i := 0; i < n; i++ {
 					ExpectCommandReaded()
 				}
-				ExpectErr(afterInputErr)
+				ExpectReadCmdErr(afterInputErr)
 			})
 		})
 
@@ -76,7 +81,7 @@ var _ = Describe("reader", func() {
 				input.WriteString("get xxx ")
 			})
 			It("fails", func() {
-				ExpectErr(afterInputErr)
+				ExpectReadCmdErr(afterInputErr)
 			})
 		})
 
@@ -85,7 +90,7 @@ var _ = Describe("reader", func() {
 				input.Write(ChunkWithoutSeparators(5 * MaxCommandSize))
 			})
 			It("fails", func() {
-				ExpectErr(afterInputErr)
+				ExpectReadCmdErr(afterInputErr)
 			})
 		})
 	})
@@ -95,7 +100,7 @@ var _ = Describe("reader", func() {
 		r = newReader(input, recycle.NewPool())
 	})
 	ExpectEOF := func() {
-		ReadCommand()
+		ReadCmd()
 		Expect(unwrap(err)).To(Equal(io.EOF))
 		Expect(clientErr).To(BeNil())
 		Expect(command).To(BeNil())
@@ -147,12 +152,53 @@ var _ = Describe("reader", func() {
 	Context("data block", func() {
 		var data *recycle.Data
 		var dbInput *bytes.Buffer
+		var leak chan *recycle.Data
 		BeforeEach(func() {
+			leak = make(chan *recycle.Data)
+			r.pool.SetLeakCallback(recycle.NotifyOnLeak(leak))
 			dbInput = &bytes.Buffer{}
 		})
+		AfterEach(func() {
+			data = nil
+			runtime.GC()
+			Consistently(leak).ShouldNot(Receive())
+		})
+
 		ReadDataBlock := func() {
 			data, clientErr, err = r.readDataBlock(dbInput.Len())
 		}
+		Context("error", func() {
+			JustBeforeEach(ReadDataBlock)
+			Context("unexpected", func() {
+				BeforeEach(func() {
+					var n int64 = InBufferSize * 3
+					dbInput.ReadFrom(io.LimitReader(fastRand, n))
+					input.Write(dbInput.Bytes()[:n/2])
+					input.WriteString(Separator)
+				})
+				It("got read err", func() {
+					Expect(unwrap(err)).To(Equal(io.ErrUnexpectedEOF))
+					Expect(data).To(BeNil())
+				})
+			})
+
+			Context("no separator after block", func() {
+				BeforeEach(func() {
+					var n int64 = InBufferSize * 3
+					dbInput.ReadFrom(io.LimitReader(fastRand, n))
+					input.Write(dbInput.Bytes())
+					input.WriteByte('x')
+					input.WriteString(Separator)
+				})
+				It("got client err", func() {
+					Expect(unwrap(clientErr)).To(Equal(ErrInvalidLineSeparator))
+					Expect(err).To(BeNil())
+					Expect(data).To(BeNil())
+				})
+			})
+
+		})
+
 		ExpectDataBlockReaded := func() {
 			ReadDataBlock()
 			ExpectNoErrors()
@@ -163,7 +209,10 @@ var _ = Describe("reader", func() {
 			dataReader.Close()
 			data.Recycle()
 
-			Expect(readed.Bytes()).To(Equal(dbInput.Bytes()))
+			// Speed up. Expect is slow for large data.
+			if !bytes.Equal(readed.Bytes(), dbInput.Bytes()) {
+				Expect(readed.Bytes()).To(Equal(dbInput.Bytes()))
+			}
 		}
 
 		Context("empty block", func() {
@@ -178,7 +227,7 @@ var _ = Describe("reader", func() {
 
 		Context("only correct data block", func() {
 			BeforeEach(func() {
-				dbInput.ReadFrom(io.LimitReader(fastRand, 2*InBufferSize))
+				dbInput.ReadFrom(io.LimitReader(fastRand, MaxItemSize))
 				input.Write(dbInput.Bytes())
 				input.WriteString(Separator)
 			})
@@ -218,7 +267,7 @@ var _ = Describe("reader", func() {
 		AssertClientErrEqual := func(expectedClientErr error) {
 			It("client error equal expected", func() {
 				ExpectCommandReaded()
-				ReadCommand()
+				ReadCmd()
 				if clientErr != nil {
 					By("Got error: " + clientErr.Error())
 				}
@@ -253,7 +302,195 @@ var _ = Describe("reader", func() {
 
 })
 
-var _ = Describe("parse", func() {
-	//TODO
+var _ = Describe("parse key fields", func() {
+	var (
+		input         string
+		extraRequired int
 
+		key     []byte
+		extra   [][]byte
+		noreply bool
+		err     error
+	)
+	JustBeforeEach(func() {
+		fields := bytes.Fields([]byte(input))
+		key, extra, noreply, err = parseKeyFields(fields, extraRequired)
+	})
+
+	Context("correct input", func() {
+		BeforeEach(func() {
+			input = "xyz x y z"
+			extraRequired = 3
+		})
+		AssertParsedWell := func() {
+			It("parsed well", func() {
+				Expect(err).To(BeNil())
+				Expect(key).To(BeEquivalentTo("xyz"))
+				Expect(extra).To(Equal([][]byte{{'x'}, {'y'}, {'z'}}))
+			})
+		}
+		AssertNoreply := func(b bool) {
+			It("noreply ok", func() {
+				Expect(noreply).To(Equal(b))
+			})
+		}
+		Context("without noreply", func() {
+			AssertParsedWell()
+			AssertNoreply(false)
+		})
+		Context("with noreply", func() {
+			BeforeEach(func() { input += " noreply" })
+			AssertParsedWell()
+			AssertNoreply(true)
+		})
+	})
+
+	AssertErr := func(expectedErr error) {
+		It("expected error", func() {
+			Expect(unwrap(err)).To(Equal(expectedErr))
+		})
+	}
+
+	Context("too many fields", func() {
+		BeforeEach(func() {
+			input = "x y z noreply"
+			extraRequired = 1
+		})
+		AssertErr(ErrTooManyFields)
+	})
+
+	Context("too few fields", func() {
+		BeforeEach(func() {
+			input = "x noreply"
+			extraRequired = 2
+		})
+		AssertErr(ErrMoreFieldsRequired)
+	})
+
+	Context("invalid option", func() {
+		BeforeEach(func() {
+			input = "x wtf"
+			extraRequired = 0
+		})
+		AssertErr(ErrInvalidOption)
+	})
+})
+
+var _ = Describe("parse set fields", func() {
+	var (
+		input   string
+		m       ItemMeta
+		noreply bool
+		err     error
+	)
+	Parse := func() {
+		fields := bytes.Fields([]byte(input))
+		m, noreply, err = parseSetFields(fields)
+	}
+	Context("correct input", func() {
+		var (
+			key             string
+			exptime         int64
+			bytes           int
+			flags           uint32
+			expectedNoreply bool
+		)
+		BeforeEach(func() {
+			key = "xx"
+			exptime = 10
+			bytes = MaxItemSize
+			flags = math.MaxUint32
+		})
+		JustBeforeEach(func() {
+			input = fmt.Sprintf("%s %v %v %v", key, flags, exptime, bytes)
+			if expectedNoreply {
+				input += " noreply"
+			}
+			Parse()
+		})
+
+		AssertParsedWell := func() {
+			It("parsed well", func() {
+				Expect(err).To(BeNil())
+				Expect(m.key).To(Equal(key))
+				Expect(m.flags).To(Equal(flags))
+				Expect(m.bytes).To(Equal(bytes))
+				Expect(noreply).To(Equal(expectedNoreply))
+				if exptime > MaxRelativeExptime {
+					exptime += time.Now().Unix()
+				}
+				Expect([]int64{m.exptime - 1, m.exptime}).To(ContainElement(exptime))
+			})
+		}
+
+		AssertParsedWell()
+		Context("with non absolute time", func() {
+			BeforeEach(func() { exptime = MaxRelativeExptime + 1 })
+			AssertParsedWell()
+		})
+		Context("with noreply", func() {
+			BeforeEach(func() { expectedNoreply = true })
+			AssertParsedWell()
+		})
+	})
+
+	JustBeforeEach(Parse)
+
+	AssertErr := func(expectedErr error) {
+		It("expected error", func() {
+			Expect(unwrap(err)).To(Equal(expectedErr))
+		})
+	}
+
+	Context("fields err", func() {
+		BeforeEach(func() {
+			input = "a b c d e c"
+		})
+		AssertErr(ErrTooManyFields)
+	})
+	const correctParams = " 1 1 1"
+
+	Context("large key", func() {
+		BeforeEach(func() {
+			in := make([]byte, MaxKeySize+1)
+			for i := range in {
+				in[i] = 'x'
+			}
+			input = string(in) + correctParams
+		})
+		AssertErr(ErrTooLargeKey)
+	})
+
+	Context("invalid char in key", func() {
+		BeforeEach(func() {
+			input = "x\x00yz" + correctParams
+		})
+		AssertErr(ErrInvalidCharInKey)
+	})
+
+	Context("invalid param", func() {
+		const paramsNum = 3
+		var params []interface{}
+		BeforeEach(func() { params = []interface{}{1, 1, 1} })
+		TestInvalidParam := func(invalid interface{}) func() {
+			return func() {
+				for i := 0; i < paramsNum; i++ {
+					paramIndex := i
+					Context(fmt.Sprint("param ", i), func() {
+						BeforeEach(func() {
+							params[paramIndex] = invalid
+							input = fmt.Sprintf("x %v %v %v", params...)
+						})
+						It("parse error", func() {
+							Expect(err).NotTo(BeNil())
+							Expect(err.Error()).To(ContainSubstring(ErrFieldsParseError.Error()))
+						})
+					})
+				}
+			}
+		}
+		Context("negative", TestInvalidParam(-1))
+		Context("overflow", TestInvalidParam(uint64(1<<63)))
+		Context("non numeric", TestInvalidParam("xxx"))
+	})
 })

@@ -26,7 +26,7 @@ const (
 	GetsCommand   = "gets"
 	DeleteCommand = "delete"
 
-	NoReplyOption = "norepry"
+	NoReplyOption = "noreply"
 
 	StoredResponse      = "STORED"
 	ValueResponse       = "VALUE"
@@ -122,20 +122,20 @@ func parseSetFields(fields [][]byte) (m ItemMeta, noreply bool, err error) {
 }
 
 func parseKeyFields(fields [][]byte, extraRequired int) (key []byte, extra [][]byte, noreply bool, err error) {
-	if len(fields) < 1 {
+	if len(fields) < 1+extraRequired {
 		err = stackerr.Wrap(ErrMoreFieldsRequired)
 		return
 	}
 	key = fields[0]
-	extra = fields[1:]
-	const maxOptional = 1
-	switch {
-	case len(extra) < extraRequired:
-		err = stackerr.Wrap(ErrMoreFieldsRequired)
-	case len(extra) > extraRequired+maxOptional:
+	extra = fields[1:][:extraRequired]
+	options := fields[1:][extraRequired:]
+	const maxOptions = 1
+	if len(options) > maxOptions {
 		err = stackerr.Wrap(ErrTooManyFields)
-	case len(extra) > extraRequired:
-		if string(extra[extraRequired]) != NoReplyOption {
+		return
+	}
+	if len(options) != 0 {
+		if string(options[0]) != NoReplyOption {
 			err = stackerr.Wrap(ErrInvalidOption)
 			return
 		}
