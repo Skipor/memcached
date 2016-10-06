@@ -12,10 +12,11 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 
+	"github.com/skipor/memcached/cache"
 	"github.com/skipor/memcached/mocks"
 	"github.com/skipor/memcached/recycle"
-	"github.com/stretchr/testify/mock"
 )
 
 var _ = Describe("reader", func() {
@@ -379,7 +380,7 @@ var _ = Describe("parse key fields", func() {
 var _ = Describe("parse set fields", func() {
 	var (
 		input   string
-		m       ItemMeta
+		m       cache.ItemMeta
 		noreply bool
 		err     error
 	)
@@ -412,14 +413,14 @@ var _ = Describe("parse set fields", func() {
 		AssertParsedWell := func() {
 			It("parsed well", func() {
 				Expect(err).To(BeNil())
-				Expect(m.key).To(Equal(key))
-				Expect(m.flags).To(Equal(flags))
-				Expect(m.bytes).To(Equal(bytes))
+				Expect(m.Key).To(Equal(key))
+				Expect(m.Flags).To(Equal(flags))
+				Expect(m.Bytes).To(Equal(bytes))
 				Expect(noreply).To(Equal(expectedNoreply))
 				if exptime > MaxRelativeExptime {
 					exptime += time.Now().Unix()
 				}
-				Expect([]int64{m.exptime - 1, m.exptime}).To(ContainElement(exptime))
+				Expect([]int64{m.Exptime - 1, m.Exptime}).To(ContainElement(exptime))
 			})
 		}
 

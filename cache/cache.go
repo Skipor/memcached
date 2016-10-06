@@ -1,4 +1,4 @@
-package memcached
+package cache
 
 import (
 	"sync"
@@ -10,10 +10,10 @@ import (
 type Temp uint8
 
 const (
-	Cold Temp = iota
-	Warm
-	Hot
-	MaxTemp = Hot
+	cold Temp = iota
+	warm
+	hot
+	maxTemp = hot
 )
 const (
 	inActive = iota
@@ -46,21 +46,21 @@ func (n *Node) Active() bool {
 const extraMemoryForItem = 256 // Item, ItemData, Node, two hash table cells.
 
 type ItemMeta struct {
-	key     string
-	flags   uint32
-	exptime int64
-	bytes   int
+	Key     string
+	Flags   uint32
+	Exptime int64
+	Bytes   int
 }
 
 type Item struct {
 	ItemMeta
-	data *recycle.Data
+	Data *recycle.Data
 }
 
 func (i Item) NewView() ItemView {
 	return ItemView{
 		i.ItemMeta,
-		i.data.NewReader(),
+		i.Data.NewReader(),
 	}
 }
 
@@ -71,26 +71,26 @@ type ItemView struct {
 
 // MemSize return approximation how much memory needed to save empty item.
 func (n *Node) MemSize() int {
-	return extraMemoryForItem + len(n.key) + n.bytes
+	return extraMemoryForItem + len(n.Key) + n.Bytes
 }
 
-type ItemList struct {
+type itemList struct {
 	memSize int64
 	// Fake nodes.
 	head *Node
 	tail *Node
 }
 
-type Cache struct {
+type cache struct {
 	sync.RWMutex
 	table             map[string]*Node
-	lists             [MaxTemp]ItemList
+	lists             [maxTemp]itemList
 	dataSizeLimit     int64
 	hotDataSizeLimit  int64
 	warmDataSizeLimit int64
 }
 
-func (c *Cache) memSize() int64 {
+func (c *cache) memSize() int64 {
 	var size int64
 	for i := range c.lists[:] {
 		size += c.lists[i].memSize
@@ -99,10 +99,10 @@ func (c *Cache) memSize() int64 {
 }
 
 // Snapshot requires write lock be acquired.
-func (c *Cache) Snapshot() *CacheSnapshot {
+func (c *cache) snapshot() *cacheSnapshot {
 	// TODO after main logic
 	panic("NIY")
 }
 
-type CacheSnapshot struct {
+type cacheSnapshot struct {
 }

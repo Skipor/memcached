@@ -6,39 +6,34 @@ import (
 	"io"
 
 	"github.com/facebookgo/stackerr"
-
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
+	"github.com/skipor/memcached/cache"
 )
 
-type Conn struct {
+type conn struct {
 	reader
 	*bufio.Writer
-	closer      io.Closer
-	log         log.Logger
-	handler     Handler
-	maxItemSize int
+	closer io.Closer
+	*ConnMeta
 }
 
-func NewConn(conn io.ReadWriteCloser, h Handler, pool *recycle.Pool, log log.Logger) *Conn {
-	return &Conn{
-		reader:  newReader(conn, pool),
-		Writer:  bufio.NewWriterSize(conn, OutBufferSize),
-		closer:  conn,
-		handler: h,
-		log:     log,
+func newConn(m *ConnMeta, rwc io.ReadWriteCloser) *conn {
+	return &conn{
+		reader:   newReader(rwc, m.Pool),
+		Writer:   bufio.NewWriterSize(rwc, OutBufferSize),
+		closer:   rwc,
+		ConnMeta: m,
 	}
 }
 
-func (c *Conn) Serve() {
-	c.log.Debug("Serve connection.")
+func (c *conn) Serve() {
+	c.Log.Debug("Serve connection.")
 	defer func() {
 		if r := recover(); r != nil {
 			c.serverError(stackerr.Newf("Panic: %s", r))
 			panic(c)
 		}
 		c.Close()
-		c.log.Debug("Connection closed.")
+		c.Log.Debug("Connection closed.")
 	}()
 
 	err := c.loop()
@@ -47,12 +42,12 @@ func (c *Conn) Serve() {
 	}
 }
 
-func (c *Conn) Close() error {
+func (c *conn) Close() error {
 	c.Flush()
 	return c.closer.Close()
 }
 
-func (c *Conn) loop() error {
+func (c *conn) loop() error {
 	for {
 		command, fields, clientErr, err := c.readCommand()
 		if err != nil {
@@ -71,7 +66,7 @@ func (c *Conn) loop() error {
 			case DeleteCommand:
 				err, clientErr = c.delete(fields)
 			default:
-				c.log.Error("Unexpected command: %s", command)
+				c.Log.Error("Unexpected command: %s", command)
 				err = c.sendResponse(ErrorResponse)
 			}
 		}
@@ -84,7 +79,7 @@ func (c *Conn) loop() error {
 	}
 }
 
-func (c *Conn) get(fields [][]byte) (clientErr, err error) {
+func (c *conn) get(fields [][]byte) (clientErr, err error) {
 	if len(fields) == 0 {
 		clientErr = stackerr.Wrap(ErrMoreFieldsRequired)
 		return
@@ -96,7 +91,13 @@ func (c *Conn) get(fields [][]byte) (clientErr, err error) {
 		}
 	}
 
-	views := c.handler.Get(fields...)
+	views := c.Cache.Get(fields...)
+
+	err = c.sendGetResponse(views)
+	return
+}
+
+func (c *conn) sendGetResponse(views []cache.ItemView) error {
 	var readerIndex int
 	defer func() {
 		// Close readers which was not successfully readed.
@@ -108,26 +109,23 @@ func (c *Conn) get(fields [][]byte) (clientErr, err error) {
 		view := views[readerIndex]
 		c.WriteString(ValueResponse)
 		c.WriteByte(' ')
-		c.WriteString(view.key)
-		fmt.Fprintf(c, " %v %v"+Separator, view.flags, view.bytes)
+		c.WriteString(view.Key)
+		fmt.Fprintf(c, " %v %v"+Separator, view.Flags, view.Bytes)
 		view.Reader.WriteTo(c)
-		_, err = c.WriteString(Separator)
+		_, err := c.WriteString(Separator)
 		if err != nil {
-			err = stackerr.Wrap(err)
-			return
+			return stackerr.Wrap(err)
 		}
 		view.Reader.Close()
 	}
-	c.sendResponse(EndResponse)
-	return
+	return c.sendResponse(EndResponse)
 }
 
-func (c *Conn) set(fields [][]byte) (clientErr, err error) {
-	var i Item
+func (c *conn) set(fields [][]byte) (clientErr, err error) {
+	var i cache.Item
 	var noreply bool
-
 	i.ItemMeta, noreply, clientErr = parseSetFields(fields)
-	if clientErr == nil && i.bytes > c.maxItemSize {
+	if clientErr == nil && i.Bytes > c.MaxItemSize {
 		clientErr = stackerr.Wrap(ErrTooLargeItem)
 	}
 	if clientErr != nil {
@@ -135,11 +133,13 @@ func (c *Conn) set(fields [][]byte) (clientErr, err error) {
 		return
 	}
 
-	i.data, clientErr, err = c.readDataBlock(i.bytes)
+	i.Data, clientErr, err = c.readDataBlock(i.Bytes)
 	if err != nil || clientErr != nil {
 		return
 	}
-	c.handler.Set(i)
+
+	c.Cache.Set(i)
+
 	if noreply {
 		err = c.Flush()
 		return
@@ -148,7 +148,7 @@ func (c *Conn) set(fields [][]byte) (clientErr, err error) {
 	return
 }
 
-func (c *Conn) delete(fields [][]byte) (clientErr, err error) {
+func (c *conn) delete(fields [][]byte) (clientErr, err error) {
 	const extraRequired = 0
 	var key []byte
 	var noreply bool
@@ -156,12 +156,13 @@ func (c *Conn) delete(fields [][]byte) (clientErr, err error) {
 	if clientErr != nil {
 		return
 	}
-	deleted := c.handler.Delete(key)
+
+	deleted := c.Cache.Delete(key)
+
 	if noreply {
 		err = c.Flush()
 		return
 	}
-
 	var response string
 	if deleted {
 		response = DeletedResponse
@@ -172,8 +173,8 @@ func (c *Conn) delete(fields [][]byte) (clientErr, err error) {
 	return
 }
 
-func (c *Conn) serverError(err error) {
-	c.log.Error("Server error: ", err)
+func (c *conn) serverError(err error) {
+	c.Log.Error("Server error: ", err)
 	if err == io.ErrUnexpectedEOF {
 		return
 	}
@@ -181,18 +182,18 @@ func (c *Conn) serverError(err error) {
 	c.sendResponse(fmt.Sprintf("%s %s", ServerErrorResponse, err))
 }
 
-func (c *Conn) sendClientError(err error) error {
-	c.log.Error("Client error: ", err)
+func (c *conn) sendClientError(err error) error {
+	c.Log.Error("Client error: ", err)
 	err = unwrap(err)
 	return c.sendResponse(fmt.Sprintf("%s %s", ClientErrorResponse, err))
 }
 
-func (c *Conn) sendResponse(res string) error {
+func (c *conn) sendResponse(res string) error {
 	c.WriteString(res)
 	c.WriteString(Separator)
 	return c.Flush()
 }
 
-func (c *Conn) Flush() error {
+func (c *conn) Flush() error {
 	return stackerr.Wrap(c.Writer.Flush())
 }

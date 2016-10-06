@@ -9,13 +9,15 @@ import (
 
 	"github.com/facebookgo/stackerr"
 	"github.com/pkg/errors"
+	"github.com/skipor/memcached/cache"
 	"github.com/skipor/memcached/recycle"
 )
 
 const (
-	MaxKeySize     = 250
-	MaxItemSize    = 128 * (1 << 20) // 128 MB.
-	MaxCommandSize = 1 << 12
+	MaxKeySize         = 250
+	MaxItemSize        = 128 * (1 << 20) // 128 MB.
+	DefaultMaxItemSize = 1 << 20
+	MaxCommandSize     = 1 << 12
 
 	MaxRelativeExptime = 60 * 60 * 24 * 30 // 30 days.
 
@@ -89,7 +91,7 @@ func parseKey(p []byte) (key string, err error) {
 	return
 }
 
-func parseSetFields(fields [][]byte) (m ItemMeta, noreply bool, err error) {
+func parseSetFields(fields [][]byte) (m cache.ItemMeta, noreply bool, err error) {
 	const extraRequired = 3
 	var key []byte
 	var extra [][]byte
@@ -97,7 +99,7 @@ func parseSetFields(fields [][]byte) (m ItemMeta, noreply bool, err error) {
 	if err != nil {
 		return
 	}
-	m.key, err = parseKey(key)
+	m.Key, err = parseKey(key)
 	if err != nil {
 		return
 	}
@@ -109,13 +111,13 @@ func parseSetFields(fields [][]byte) (m ItemMeta, noreply bool, err error) {
 			return
 		}
 	}
-	m.flags = uint32(parsed[0])
-	m.exptime = int64(parsed[1])
-	if m.exptime > MaxRelativeExptime {
-		m.exptime += time.Now().Unix()
+	m.Flags = uint32(parsed[0])
+	m.Exptime = int64(parsed[1])
+	if m.Exptime > MaxRelativeExptime {
+		m.Exptime += time.Now().Unix()
 	}
-	m.bytes = int(parsed[2])
-	if m.bytes < 0 || m.bytes > MaxItemSize {
+	m.Bytes = int(parsed[2])
+	if m.Bytes < 0 || m.Bytes > MaxItemSize {
 		err = ErrTooLargeItem
 	}
 	return

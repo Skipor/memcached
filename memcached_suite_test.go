@@ -42,3 +42,16 @@ func (fastRandReader) Read(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+const (
+	KeyPattern         = `[\w[:punct:]]+`
+	ErrorMsgPattern    = `[ \w[:punct:]]+`
+	SeparatorPattern   = `\r\n`
+	ErrorPattern       = ErrorResponse + SeparatorPattern
+	ClientErrorPattern = ClientErrorResponse + ` ` + ErrorMsgPattern + SeparatorPattern
+	ServerErrorPattern = ServerErrorResponse + ` ` + ErrorMsgPattern + SeparatorPattern
+	StoredPattern      = StoredResponse + SeparatorPattern
+	EndPattern         = EndResponse + SeparatorPattern
+	DeletedPattern     = DeletedResponse + SeparatorPattern
+	NotFoundPattern    = NotFoundResponse + SeparatorPattern
+)
