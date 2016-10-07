@@ -12,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/skipor/memcached/testutil"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/skipor/memcached/cache"
@@ -173,7 +174,7 @@ var _ = Describe("reader", func() {
 			Context("unexpected", func() {
 				BeforeEach(func() {
 					var n int64 = InBufferSize * 3
-					dbInput.ReadFrom(io.LimitReader(fastRand, n))
+					dbInput.ReadFrom(io.LimitReader(FastRand, n))
 					input.Write(dbInput.Bytes()[:n/2])
 					input.WriteString(Separator)
 				})
@@ -186,7 +187,7 @@ var _ = Describe("reader", func() {
 			Context("no separator after block", func() {
 				BeforeEach(func() {
 					var n int64 = InBufferSize * 3
-					dbInput.ReadFrom(io.LimitReader(fastRand, n))
+					dbInput.ReadFrom(io.LimitReader(FastRand, n))
 					input.Write(dbInput.Bytes())
 					input.WriteByte('x')
 					input.WriteString(Separator)
@@ -210,10 +211,7 @@ var _ = Describe("reader", func() {
 			dataReader.Close()
 			data.Recycle()
 
-			// Speed up. Expect is slow for large data.
-			if !bytes.Equal(readed.Bytes(), dbInput.Bytes()) {
-				Expect(readed.Bytes()).To(Equal(dbInput.Bytes()))
-			}
+			ExpectBytesEqual(readed.Bytes(), dbInput.Bytes())
 		}
 
 		Context("empty block", func() {
@@ -228,7 +226,7 @@ var _ = Describe("reader", func() {
 
 		Context("only correct data block", func() {
 			BeforeEach(func() {
-				dbInput.ReadFrom(io.LimitReader(fastRand, MaxItemSize))
+				dbInput.ReadFrom(io.LimitReader(FastRand, MaxItemSize))
 				input.Write(dbInput.Bytes())
 				input.WriteString(Separator)
 			})
@@ -241,7 +239,7 @@ var _ = Describe("reader", func() {
 		Context("between commands", func() {
 			BeforeEach(func() {
 				input.WriteString(correctCommand)
-				dbInput.ReadFrom(io.LimitReader(fastRand, 2*InBufferSize))
+				dbInput.ReadFrom(io.LimitReader(FastRand, 2*InBufferSize))
 				input.Write(dbInput.Bytes())
 				input.WriteString(Separator)
 				input.WriteString(correctCommand)

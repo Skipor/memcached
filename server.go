@@ -56,7 +56,7 @@ func (s *Server) Serve(l net.Listener) error {
 			continue
 		}
 		tempDelay = 0
-		go s.newConn(c).Serve()
+		go s.newConn(c).serve()
 	}
 }
 
@@ -64,7 +64,7 @@ func (s *Server) newConn(c net.Conn) *conn {
 	return newConn(&s.ConnMeta, c)
 }
 
-func (s *Server) init() {
+func (s *ConnMeta) init() {
 	if s.Log == nil {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
 	}

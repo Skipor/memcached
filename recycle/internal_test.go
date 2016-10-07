@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/skipor/memcached/mocks"
+	. "github.com/skipor/memcached/testutil"
 )
 
 var _ = Describe("Pool create", func() {
@@ -141,14 +142,32 @@ var _ = Describe("data read", func() {
 			Expect(err).To(BeNil())
 		})
 
-		It("chunked data equals readed", func() {
-			buf := &bytes.Buffer{}
-			for _, ch := range data.chunks {
-				buf.Write(ch)
-			}
-			By(fmt.Sprintf("Chunks num: %v", len(data.chunks)))
-			Expect(buf.Len()).To(Equal(len(input)))
-			Expect(buf.Bytes()).To(Equal(input))
+		Context("expected data equals", func() {
+			var buf *bytes.Buffer
+			BeforeEach(func() { buf = &bytes.Buffer{} })
+
+			It("chunked", func() {
+				for _, ch := range data.chunks {
+					buf.Write(ch)
+				}
+				By(fmt.Sprintf("Chunks num: %v", len(data.chunks)))
+				ExpectBytesEqual(buf.Bytes(), input)
+			})
+
+			It("got from WriteTo", func() {
+				r := data.NewReader()
+				defer r.Close()
+				r.WriteTo(buf)
+				ExpectBytesEqual(buf.Bytes(), input)
+			})
+
+			It("got from Read", func() {
+				r := data.NewReader()
+				defer r.Close()
+				buf.ReadFrom(r)
+				ExpectBytesEqual(buf.Bytes(), input)
+			})
+
 		})
 
 		Context("concurrent reads", func() {
@@ -164,7 +183,11 @@ var _ = Describe("data read", func() {
 						sleep := 50 + Rand.Intn(100)
 						time.Sleep(time.Duration(sleep) * time.Millisecond)
 						buf := &bytes.Buffer{}
-						r.WriteTo(buf)
+						if k%2 == 0 {
+							r.WriteTo(buf)
+						} else {
+							buf.ReadFrom(r)
+						}
 						r.Close()
 						Expect(r.isClosed()).To(BeTrue())
 						readResults <- buf.Bytes()
@@ -173,7 +196,7 @@ var _ = Describe("data read", func() {
 
 				It("all readers got correct result", func() {
 					for i := 0; i < k; i++ {
-						Expect(<-readResults).To(Equal(input))
+						ExpectBytesEqual(<-readResults, input)
 					}
 				})
 

@@ -25,7 +25,7 @@ func newConn(m *ConnMeta, rwc io.ReadWriteCloser) *conn {
 	}
 }
 
-func (c *conn) Serve() {
+func (c *conn) serve() {
 	c.Log.Debug("Serve connection.")
 	defer func() {
 		if r := recover(); r != nil {
@@ -60,11 +60,11 @@ func (c *conn) loop() error {
 		if clientErr == nil {
 			switch string(command) { // No allocation.
 			case GetCommand, GetsCommand:
-				err, clientErr = c.get(fields)
+				clientErr, err = c.get(fields)
 			case SetCommand:
-				err, clientErr = c.set(fields)
+				clientErr, err = c.set(fields)
 			case DeleteCommand:
-				err, clientErr = c.delete(fields)
+				clientErr, err = c.delete(fields)
 			default:
 				c.Log.Error("Unexpected command: %s", command)
 				err = c.sendResponse(ErrorResponse)
@@ -125,11 +125,13 @@ func (c *conn) set(fields [][]byte) (clientErr, err error) {
 	var i cache.Item
 	var noreply bool
 	i.ItemMeta, noreply, clientErr = parseSetFields(fields)
-	if clientErr == nil && i.Bytes > c.MaxItemSize {
-		clientErr = stackerr.Wrap(ErrTooLargeItem)
-	}
 	if clientErr != nil {
 		err = c.discardCommand()
+		return
+	}
+	if i.Bytes > c.MaxItemSize {
+		clientErr = stackerr.Wrap(ErrTooLargeItem)
+		_, err = c.Discard(i.Bytes + len(Separator))
 		return
 	}
 

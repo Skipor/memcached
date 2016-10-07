@@ -45,27 +45,51 @@ type DataReader struct {
 	byteIndex  int
 }
 
+func (r *DataReader) eof() bool {
+	return r.chunkIndex >= len(r.data.chunks)
+}
+
+func (r *DataReader) chunk() []byte {
+	return r.data.chunks[r.chunkIndex][r.byteIndex:]
+}
+
+func (r *DataReader) readed(n int) {
+	if n < len(r.chunk()) {
+		r.byteIndex += n
+		return
+	}
+	r.chunkIndex++
+	r.byteIndex = 0
+}
+
 var _ interface {
 	io.ReadCloser
 	io.WriterTo
 } = (*DataReader)(nil)
 
-func (r *DataReader) Read(p []byte) (int, error) {
-	panic("use WriteTo (io.Copy can do it for you) to avoid copy and allocations")
-}
-
-func (r *DataReader) WriteTo(w io.Writer) (n int64, err error) {
-	var nChunk int
-	for r.chunkIndex < len(r.data.chunks) {
-		chunk := r.data.chunks[r.chunkIndex]
-		nChunk, err = w.Write(chunk[r.byteIndex:])
-		n += (int64)(nChunk)
+func (r *DataReader) WriteTo(w io.Writer) (nn int64, err error) {
+	for !r.eof() {
+		var n int
+		n, err = w.Write(r.chunk())
+		r.readed(n)
+		nn += (int64)(n)
 		if err != nil {
-			r.byteIndex += nChunk
 			return
 		}
-		r.byteIndex = 0
-		r.chunkIndex++
+	}
+	return
+}
+
+// Read method is for test purpose only. WriteTo should be uses instead.
+func (r *DataReader) Read(p []byte) (nn int, err error) {
+	// panic("use WriteTo (io.Copy can do it for you) to avoid copy and allocations")
+	for nn < len(p) && !r.eof() {
+		n := copy(p[nn:], r.chunk())
+		r.readed(n)
+		nn += n
+	}
+	if r.eof() {
+		err = io.EOF
 	}
 	return
 }

@@ -1,28 +1,201 @@
 package memcached
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"io"
+	"io/ioutil"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
+	. "github.com/onsi/gomega/gbytes"
+	"github.com/stretchr/testify/mock"
+
+	"github.com/skipor/memcached/cache"
+	"github.com/skipor/memcached/cache/cachemocks"
+	"github.com/skipor/memcached/log"
+	. "github.com/skipor/memcached/testutil"
 )
 
 type Out struct {
-	buf *gbytes.Buffer
+	buf *Buffer
 }
 
-var _ gbytes.BufferProvider = (*Out)(nil)
+func NewOut() *Out {
+	return &Out{NewBuffer()}
+}
 
-func (o *Out) Buffer() *gbytes.Buffer {
+var _ BufferProvider = (*Out)(nil)
+
+func (o *Out) Buffer() *Buffer {
 	return o.buf
 }
+func ReadAll(i *cache.Item) []byte {
+	ir := i.Data.NewReader()
+	defer ir.Close()
+	data, _ := ioutil.ReadAll(ir)
+	return data
+}
 
-var _ = FDescribe("Conn", func() {
-	var ()
+func (o *Out) ExpectItem(i *cache.Item) {
+	Expect(o).To(Say(ValueResponse + " "))
+	o.expectChunk([]byte(i.Key))
+	Expect(o).To(Say(fmt.Sprintf(" %s %s", i.Flags, i.Bytes)))
+	expectedData := ReadAll(i)
+	actualData, err := ioutil.ReadAll(io.LimitReader(o.buf, int64(i.Bytes)))
+	Expect(err).To(BeNil())
+	ExpectBytesEqual(actualData, expectedData)
+	Expect(o).To(Say(SeparatorPattern))
+}
+
+func (o *Out) expectChunk(ch []byte) {
+	chReader := &bytes.Buffer{}
+	_, err := chReader.ReadFrom(io.LimitReader(o.buf, int64(len(ch))))
+	Expect(err).To(BeNil())
+	ExpectBytesEqual(ch, chReader.Bytes())
+}
+
+var _ = Describe("Conn", func() {
+	var (
+		connMeta      *ConnMeta
+		mcache        *cachemocks.Cache
+		c             *conn
+		out           *Out
+		in            *io.PipeWriter
+		serveFinished chan struct{}
+	)
 	BeforeEach(func() {
-		io.Pipe()
-		Expect(true).To(BeTrue())
+		serveFinished = make(chan struct{})
+		out = NewOut()
+		mcache = &cachemocks.Cache{}
+		var connReader *io.PipeReader
+		connReader, in = io.Pipe()
+		connMeta = &ConnMeta{
+			Cache: mcache,
+			Log:   log.NewLogger(log.DebugLevel, GinkgoWriter),
+		}
+		connMeta.init()
+		rwc := struct {
+			io.ReadCloser
+			io.Writer
+		}{connReader, out.buf}
+		c = newConn(connMeta, rwc)
+		go func() {
+			defer GinkgoRecover()
+			c.serve()
+			close(serveFinished)
+		}()
+	})
+	AfterEach(func() {
+		in.Close()
+		Eventually(serveFinished).Should(BeClosed())
+		//Test should read all data.
+		Expect(out).NotTo(Say(Anything))
+		Expect(func() { mcache.AssertExpectations(GinkgoT()) }).NotTo(Panic())
+	})
+
+	AssertSay := func(pattern string) {
+		It("expected response", func() {
+			Eventually(out, 0.1).Should(Say(pattern))
+		})
+	}
+
+	// Test can use input string, or write to in directly.
+	var input string
+	JustBeforeEach(func() { io.WriteString(in, input) })
+	AfterEach(func() { input = "" })
+	Input := func(s string) {
+		BeforeEach(func() { input = s })
+	}
+
+	Context("server error", func() {
+		BeforeEach(func() {
+			input = "get \r\n"
+			in.CloseWithError(errors.New("test err"))
+		})
+		AssertSay(ServerErrorPattern)
+	})
+
+	Context("client error", func() {
+		Input("get \r\n")
+		AssertSay(ClientErrorPattern)
+	})
+
+	Context("delete", func() {
+		var key string
+		var noreply bool
+		var deleted bool
+		AfterEach(func() {
+			noreply = false
+			deleted = false
+		})
+		JustBeforeEach(func() {
+			key = "test_key"
+			mcache.On("Delete", []byte(key)).Return(deleted)
+			input = "delete " + key
+			if noreply {
+				input += " noreply"
+			}
+			input += Separator
+			io.WriteString(in, input)
+		})
+
+		Context("no reply", func() {
+			BeforeEach(func() { noreply = true })
+		})
+		Context("not found", func() {
+			AssertSay(NotFoundPattern)
+		})
+		Context("deleted", func() {
+			BeforeEach(func() { deleted = true })
+			AssertSay(DeletedPattern)
+		})
+	})
+
+	Context("set", func() {
+		var meta cache.ItemMeta
+		var data []byte
+		var noreply bool
+		BeforeEach(func() {
+			meta.Key = "test_key"
+			meta.Exptime = Rand.Int63n(MaxRelativeExptime)
+			meta.Flags = Rand.Uint32()
+			meta.Bytes = Rand.Intn(connMeta.MaxItemSize)
+		})
+		AfterEach(func() { noreply = false })
+
+		JustBeforeEach(func() {
+			data = make([]byte, meta.Bytes)
+			io.ReadFull(Rand, data)
+			mcache.On("Set", mock.Anything).Run(func(args mock.Arguments) {
+				i := args.Get(0).(cache.Item)
+				Expect(i.ItemMeta).To(Equal(meta))
+				ExpectBytesEqual(ReadAll(&i), data)
+			})
+			input = fmt.Sprintf("set %s %v %v %v",
+				meta.Key, meta.Flags, meta.Exptime, meta.Bytes)
+			if noreply {
+				input += " noreply"
+			}
+			input += Separator
+			input += string(data) + Separator
+			io.WriteString(in, input)
+		})
+
+		Context("no reply", func() {
+			BeforeEach(func() { noreply = true })
+			It("say nothing", func() {})
+		})
+		Context("stored", func() {
+			AssertSay(StoredPattern)
+		})
+		Context("too large item", func() {
+			BeforeEach(func() { meta.Bytes = connMeta.MaxItemSize + 1 })
+			JustBeforeEach(func() { mcache.ExpectedCalls = nil })
+			AssertSay(ClientErrorPattern)
+
+		})
 	})
 
 })
