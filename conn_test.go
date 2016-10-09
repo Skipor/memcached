@@ -1,11 +1,11 @@
 package memcached
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"runtime"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -15,8 +15,11 @@ import (
 	"github.com/skipor/memcached/cache"
 	"github.com/skipor/memcached/cache/cachemocks"
 	"github.com/skipor/memcached/log"
+	"github.com/skipor/memcached/recycle"
 	. "github.com/skipor/memcached/testutil"
 )
+
+const ReadTimeout = 0.2
 
 type Out struct {
 	buf *Buffer
@@ -39,9 +42,9 @@ func ReadAll(i *cache.Item) []byte {
 }
 
 func (o *Out) ExpectItem(i *cache.Item) {
-	Expect(o).To(Say(ValueResponse + " "))
+	Eventually(o).Should(Say(ValueResponse + " "))
 	o.expectChunk([]byte(i.Key))
-	Expect(o).To(Say(fmt.Sprintf(" %s %s", i.Flags, i.Bytes)))
+	Eventually(o).Should(Say(fmt.Sprintf(" %v %v"+SeparatorPattern, i.Flags, i.Bytes)))
 	expectedData := ReadAll(i)
 	actualData, err := ioutil.ReadAll(io.LimitReader(o.buf, int64(i.Bytes)))
 	Expect(err).To(BeNil())
@@ -50,10 +53,10 @@ func (o *Out) ExpectItem(i *cache.Item) {
 }
 
 func (o *Out) expectChunk(ch []byte) {
-	chReader := &bytes.Buffer{}
-	_, err := chReader.ReadFrom(io.LimitReader(o.buf, int64(len(ch))))
+	actualCh := make([]byte, len(ch))
+	_, err := io.ReadFull(o.buf, actualCh)
 	Expect(err).To(BeNil())
-	ExpectBytesEqual(ch, chReader.Bytes())
+	ExpectBytesEqual(actualCh, ch)
 }
 
 var _ = Describe("Conn", func() {
@@ -87,17 +90,17 @@ var _ = Describe("Conn", func() {
 			close(serveFinished)
 		}()
 	})
+
 	AfterEach(func() {
 		in.Close()
 		Eventually(serveFinished).Should(BeClosed())
-		//Test should read all data.
 		Expect(out).NotTo(Say(Anything))
 		Expect(func() { mcache.AssertExpectations(GinkgoT()) }).NotTo(Panic())
 	})
 
 	AssertSay := func(pattern string) {
 		It("expected response", func() {
-			Eventually(out, 0.1).Should(Say(pattern))
+			Eventually(out, ReadTimeout).Should(Say(pattern))
 		})
 	}
 
@@ -154,9 +157,11 @@ var _ = Describe("Conn", func() {
 	})
 
 	Context("set", func() {
-		var meta cache.ItemMeta
-		var data []byte
-		var noreply bool
+		var (
+			meta    cache.ItemMeta
+			data    []byte
+			noreply bool
+		)
 		BeforeEach(func() {
 			meta.Key = "test_key"
 			meta.Exptime = Rand.Int63n(MaxRelativeExptime)
@@ -192,10 +197,91 @@ var _ = Describe("Conn", func() {
 		})
 		Context("too large item", func() {
 			BeforeEach(func() { meta.Bytes = connMeta.MaxItemSize + 1 })
-			JustBeforeEach(func() { mcache.ExpectedCalls = nil })
+			JustBeforeEach(func() {
+				// cache.Cache.Set should not be called.
+				mcache.ExpectedCalls = nil
+			})
 			AssertSay(ClientErrorPattern)
-
 		})
 	})
 
+	Context("get", func() {
+		var (
+			kn         int
+			foundItems = []int{}
+			items      []*cache.Item
+			keys       [][]byte
+			leak       chan *recycle.Data
+		)
+
+		BeforeEach(func() {
+			leak = make(chan *recycle.Data)
+			connMeta.Pool.SetLeakCallback(recycle.NotifyOnLeak(leak))
+		})
+		AfterEach(func() {
+			kn = 0
+			foundItems = nil
+			for _, it := range items {
+				it.Data.Recycle()
+			}
+			items = nil
+			runtime.GC()
+			Consistently(leak).ShouldNot(Receive())
+		})
+		AssertGotExpectedItems := func() {
+			It("found expected items", func() {
+				for i := range foundItems {
+					By(fmt.Sprintf("Expecting value %v", i))
+					out.ExpectItem(items[i])
+					By(fmt.Sprintf("Got value %v", i))
+				}
+				Eventually(out, ReadTimeout).Should(Say(EndPattern))
+			})
+		}
+
+		JustBeforeEach(func() {
+			keys = make([][]byte, kn)
+			for i := 0; i < kn; i++ {
+				keys[i] = []byte(fmt.Sprintf("test_key_%v", i))
+			}
+			for _, i := range foundItems {
+				meta := cache.ItemMeta{
+					Key:     string(keys[i]),
+					Exptime: Rand.Int63n(DefaultMaxItemSize),
+					Flags:   Rand.Uint32(),
+					Bytes:   Rand.Intn(connMeta.MaxItemSize),
+				}
+				data, _ := connMeta.Pool.ReadData(FastRand, meta.Bytes)
+				items = append(items, &cache.Item{meta, data})
+			}
+			mcache.On("Get", mock.Anything).Return(func(actualKeys ...[]byte) (views []cache.ItemView) {
+				for i, k := range keys {
+					Expect(actualKeys[i]).To(Equal(k))
+				}
+				for _, it := range items {
+					By(fmt.Sprintf("Found item %s.", it.Key))
+					views = append(views, it.NewView())
+				}
+				return
+			})
+			input = "get"
+			for _, k := range keys {
+				input += " " + string(k)
+			}
+			input += Separator
+			io.WriteString(in, input)
+		})
+
+		Context("no items founded", func() {
+			BeforeEach(func() { kn = 5 })
+			AssertGotExpectedItems()
+		})
+		Context("found some", func() {
+			BeforeEach(func() {
+				kn = 5
+				foundItems = []int{0, 2, 4}
+			})
+			AssertGotExpectedItems()
+		})
+	})
 })

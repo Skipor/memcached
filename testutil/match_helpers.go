@@ -6,9 +6,23 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const maxPrintableLen = 1024
+
 func ExpectBytesEqual(a, b []byte) {
 	if !bytes.Equal(a, b) {
-		Expect(a).To(Equal(b))
+		if len(a)+len(b) <= 2*maxPrintableLen {
+			ExpectWithOffset(1, a).To(Equal(b))
+		}
+		ExpectWithOffset(1, len(a)).To(Equal(len(b)), "Length are unequal and data is too large to print.")
+		for i, ab := range a {
+			if ab != b[i] {
+				var cmpLen int = maxPrintableLen
+				if leftChunk := a[i:]; len(leftChunk) < maxPrintableLen {
+					cmpLen = len(leftChunk)
+				}
+				ExpectWithOffset(1, a[i:cmpLen]).To(Equal(b[i:cmpLen]), "Skiped %v equal bytes.", i)
+			}
+		}
 	}
 }
 

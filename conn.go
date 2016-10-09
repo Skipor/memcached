@@ -58,6 +58,7 @@ func (c *conn) loop() error {
 			return stackerr.Wrap(err)
 		}
 		if clientErr == nil {
+			c.Log.Debugf("Command: %s.", command)
 			switch string(command) { // No allocation.
 			case GetCommand, GetsCommand:
 				clientErr, err = c.get(fields)
@@ -98,6 +99,7 @@ func (c *conn) get(fields [][]byte) (clientErr, err error) {
 }
 
 func (c *conn) sendGetResponse(views []cache.ItemView) error {
+	c.Log.Debugf("Sending %v founded values.", len(views))
 	var readerIndex int
 	defer func() {
 		// Close readers which was not successfully readed.
@@ -107,6 +109,7 @@ func (c *conn) sendGetResponse(views []cache.ItemView) error {
 	}()
 	for ; readerIndex < len(views); readerIndex++ {
 		view := views[readerIndex]
+		c.Log.Debugf("Sending value %v. Key %s.", readerIndex, view.Key)
 		c.WriteString(ValueResponse)
 		c.WriteByte(' ')
 		c.WriteString(view.Key)
