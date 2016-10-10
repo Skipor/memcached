@@ -12,7 +12,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/skipor/memcached/mocks"
+	"github.com/skipor/memcached/internal/mocks"
+	"github.com/skipor/memcached/internal/tag"
 	. "github.com/skipor/memcached/testutil"
 )
 
@@ -74,7 +75,7 @@ var _ = Describe("chunk requested", func() {
 	}
 	AssertChunkReturnsAfterRecycle := func() {
 		It("it returns after recycle", func() {
-			if RaceEnabled {
+			if tag.Race {
 				Skip("no pooling happens when race detector is on")
 			}
 			p.recycleChunk(chunk)

@@ -12,12 +12,12 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "github.com/skipor/memcached/testutil"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/mocks"
+	"github.com/skipor/memcached/internal/mocks"
 	"github.com/skipor/memcached/recycle"
+	. "github.com/skipor/memcached/testutil"
 )
 
 var _ = Describe("reader", func() {

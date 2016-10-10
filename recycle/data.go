@@ -27,9 +27,7 @@ func (d *Data) NewReader() *DataReader {
 		panic("read access after recycle call")
 	}
 	atomic.AddInt32(&d.references, 1)
-	return &DataReader{
-		data: d,
-	}
+	return &DataReader{data: d}
 }
 
 func (d *Data) Recycle() {
