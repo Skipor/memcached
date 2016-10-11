@@ -1,22 +1,21 @@
 package cache
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"time"
 )
 
 const testNodeSize = 2 * extraSizePerNode
 
 var _ = Describe("LRU", func() {
 	var (
-		l lru
+		l *lru
 	)
 	BeforeEach(func() {
-		resetKeys()
-		l = lru{}
-		l.init()
+		resetTestKeys()
+		l = newLRU()
 	})
 	AfterEach(func() {
 		l.ExpectInvariantsOk()
@@ -24,12 +23,12 @@ var _ = Describe("LRU", func() {
 	It("init", func() {})
 
 	It("push", func() {
-		l.pushBack(testNode())
+		l.push(testNode())
 	})
 
 	It("push multi", func() {
-		l.pushBack(testNode())
-		l.pushBack(testNode())
+		l.push(testNode())
+		l.push(testNode())
 	})
 
 	Context("shrink", func() {
@@ -58,7 +57,7 @@ var _ = Describe("LRU", func() {
 				mc.On("AttachAsInactive", an2).Once()
 				mc.On("Evict", an1).Once()
 				for _, n := range []*node{en, ian, an1, an2} {
-					l.pushBack(n)
+					l.push(n)
 				}
 				an1.setActive()
 				an2.setActive()
@@ -77,9 +76,8 @@ var _ = Describe("LRU", func() {
 		})
 
 		It("move to other", func() {
-			otherLRU := lru{}
-			otherLRU.init()
-			l.onInactive = mc.MoveTo(&otherLRU)
+			otherLRU := newLRU()
+			l.onInactive = mc.MoveTo(otherLRU)
 			l.onActive = mc.AttachAsInactive
 
 			en := expiredNode()
@@ -92,7 +90,7 @@ var _ = Describe("LRU", func() {
 			mc.On("AttachAsInactive", an2).Once()
 			mc.On("Moved", an1).Once()
 			for _, n := range []*node{en, ian, an1, an2} {
-				l.pushBack(n)
+				l.push(n)
 			}
 			an1.setActive()
 			an2.setActive()
@@ -100,7 +98,7 @@ var _ = Describe("LRU", func() {
 			l.shrink(1*testNodeSize, time.Now().Unix())
 			otherLRU.ExpectInvariantsOk()
 			Expect(l.nodes()).To(ConsistOf(an2))
-			Expect(otherLRU.nodes()).To(ConsistOf(ian, an2))
+			Expect(otherLRU.nodes()).To(ConsistOf(ian, an1))
 		})
 
 	})

@@ -85,7 +85,7 @@ func LevelFromString(s string) (Level, error) {
 const stdLoggerFlags = log.LstdFlags | log.Lmicroseconds | log.Lshortfile
 
 func NewLogger(l Level, w io.Writer) Logger {
-	return NewLoggerSink(l, &stdSink{log.New(w, "", stdLoggerFlags)})
+	return NewLoggerSink(l, log.New(w, "", stdLoggerFlags))
 }
 
 func NewLoggerSink(l Level, s Sink) Logger {
@@ -151,32 +151,26 @@ func (l *logger) Fatalf(format string, args ...interface{}) {
 }
 
 type Sink interface {
-	Output(callDepth int, formated string)
-}
-
-type stdSink struct {
-	std *log.Logger
-}
-
-func (s *stdSink) Output(callDepth int, formated string) {
-	s.std.Output(callDepth+1, formated)
+	Output(callDepth int, s string) error
 }
 
 const initialLoggerCallDepth = 3
 
-func (l *logger) log(level Level, args ...interface{}) {
-	if level >= l.level {
-		l.sink.Output(l.depth+initialLoggerCallDepth, level, l.fields, fmt.Sprint(args...))
+func (l *logger) log(lvl Level, args ...interface{}) {
+	if lvl >= l.level {
+		s := render(lvl, l.fields, fmt.Sprint(args...))
+		l.sink.Output(l.depth+initialLoggerCallDepth, s)
 	}
 }
 
-func (l *logger) logf(level Level, format string, args ...interface{}) {
-	if level >= l.level {
-		l.sink.Output(l.depth+initialLoggerCallDepth, level, l.fields, fmt.Sprintf(format, args...))
+func (l *logger) logf(lvl Level, format string, args ...interface{}) {
+	if lvl >= l.level {
+		s := render(lvl, l.fields, fmt.Sprintf(format, args...))
+		l.sink.Output(l.depth+initialLoggerCallDepth, s)
 	}
 }
 
-func format(l Level, f Fields, msg string) string {
+func render(l Level, f Fields, msg string) string {
 	if len(f) == 0 {
 		return l.String() + ": " + msg
 	}

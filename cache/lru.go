@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	inactive = 0
-	active   = 1
+	inactive int32 = iota
+	active
 )
 
 // Pre and post conditions (Invariants) for pushBack and shrink methods:
@@ -21,7 +21,7 @@ const (
 type lru struct {
 	size int64
 	// callbacks called in shrink.
-	// Callback should save lru invariants: attach to same owner, or disown node.
+	// Callback should save lru invariants: attach to same owner or disown node.
 	callbacks
 
 	// Fake nodes. Real nodes are between them.
@@ -41,7 +41,20 @@ type callbacks struct {
 	onInactive func(*node)
 }
 
-func (l *lru) pushBack(n *node) {
+// For debug output.
+const fakeHeadKey = " !HEAD! "
+const fakeTailKey = " !TAIL! "
+
+func newLRU() *lru {
+	l := &lru{}
+	l.fakeHead, l.fakeTail = &node{}, &node{}
+	l.fakeHead.Key = fakeHeadKey
+	l.fakeTail.Key = fakeTailKey
+	link(l.fakeHead, l.fakeTail)
+	return l
+}
+
+func (l *lru) push(n *node) {
 	n.owner = l
 	l.size += n.size()
 	attachAsInactive(n)
@@ -71,11 +84,6 @@ func (l *lru) shrink(toSize int64, now int64) {
 		l.onInactive(cur)
 	}
 	link(l.fakeHead, cur)
-}
-
-func (l *lru) init() {
-	l.fakeHead, l.fakeTail = &node{}, &node{}
-	link(l.fakeHead, l.fakeTail)
 }
 
 func (l *lru) head() *node      { return l.fakeHead.next }
@@ -141,6 +149,19 @@ func attachAsInactive(n *node) {
 func moveTo(other *lru) func(*node) {
 	return func(n *node) {
 		n.disown()
-		other.pushBack(n)
+		other.push(n)
 	}
 }
+
+func (n *node) GoString() string {
+	key := func(n *node) interface{} {
+		if n == nil {
+			return nil
+		}
+		return n.Key
+	}
+	return fmt.Sprintf("{Item:%#v, active:%v, owner:%p, prev:%v, next:%v}",
+		n.Item, n.isActive(), n.owner, key(n.prev), key(n.next))
+}
+
+var _ fmt.GoStringer

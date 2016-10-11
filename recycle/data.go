@@ -1,6 +1,7 @@
 package recycle
 
 import (
+	"fmt"
 	"io"
 	"sync/atomic"
 )
@@ -121,4 +122,10 @@ func (d *Data) decReference() {
 
 func (d *Data) isRecycled() bool {
 	return d.pool == nil
+}
+
+func (d *Data) GoString() string {
+	return fmt.Sprintf("{recycleCalled:%v, refs:%v, chunks:%v}",
+		d.recycleCalled == 1, d.references, d.chunks)
+
 }

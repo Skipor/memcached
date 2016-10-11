@@ -1,6 +1,10 @@
 package cache
 
-import "github.com/skipor/memcached/recycle"
+import (
+	"fmt"
+
+	"github.com/skipor/memcached/recycle"
+)
 
 type Item struct {
 	ItemMeta
@@ -28,4 +32,8 @@ func (i Item) NewView() ItemView {
 type ItemView struct {
 	ItemMeta
 	Reader *recycle.DataReader
+}
+
+func (i Item) GoString() string {
+	return fmt.Sprintf("%#v, Data:%#v}", i.ItemMeta, i.Data)
 }

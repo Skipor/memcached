@@ -2,7 +2,6 @@ package cache
 
 import (
 	"sync"
-
 	"time"
 
 	"github.com/skipor/memcached/internal/tag"
@@ -34,7 +33,12 @@ type Config struct {
 }
 
 func NewCache(l log.Logger, conf Config) Cache {
+	return newCache(l, conf)
+}
+
+func newCache(l log.Logger, conf Config) *cache {
 	c := &cache{
+		log:   l,
 		table: make(map[string]*node),
 		limits: limits{
 			total: conf.Size,
@@ -42,9 +46,10 @@ func NewCache(l log.Logger, conf Config) Cache {
 			warm:  conf.Size * (warmCap * 100) / 100,
 		},
 	}
-	for _, lru := range c.lrus[:] {
-		lru.init()
+	for i := 0; i < temps; i++ {
+		lru := newLRU()
 		lru.onExpire = c.onExpire
+		c.lrus = append(c.lrus, lru)
 	}
 	c.hot().onActive = attachAsInactive
 	c.warm().onActive = attachAsInactive
@@ -74,7 +79,7 @@ func NewCache(l log.Logger, conf Config) Cache {
 type cache struct {
 	sync.RWMutex
 	table  map[string]*node
-	lrus   [temps]lru
+	lrus   []*lru
 	limits limits
 	log    log.Logger
 }
@@ -98,17 +103,18 @@ func (c *cache) Set(i Item) {
 		n.Item = i
 		n.active = active
 	} else {
+		c.log.Debugf("Add item %s.", i.Key)
 		n = newNode(i)
 		c.table[i.Key] = n
-		c.lrus[hot].pushBack(n)
+		c.lrus[hot].push(n)
 	}
 
 	if n.size() > c.limits.hot {
 		// TODO do this check earlier
-		panic("too large item")
+		c.log.Panic("Too large item. Size %v, limit %v", n.size(), c.limits.hot)
 	}
 
-	if c.hotOverflow() || c.overflow() {
+	if c.hotOverflow() || c.totalOverflow() {
 		// TODO do this in backgroud goroutine. That improves latency.
 		c.fixOverflows()
 	}
@@ -134,36 +140,40 @@ func (c *cache) Delete(key []byte) (deleted bool) {
 	c.Lock()
 	defer c.Unlock()
 	n, ok := c.table[string(key)] // No allocation.
+	if !ok {
+		return false
+	}
 	n.detach()
 	c.deleteDetached(n)
-	return ok
+	return true
 }
 
 func (c *cache) fixOverflows() {
+	c.log.Debug("Fixing overflows")
 	now := time.Now().Unix()
 	if c.hotOverflow() {
+		c.log.Debug("Hot overflow.")
 		c.hot().shrink(c.limits.hot, now)
 	}
-	if !c.overflow() {
+	if !c.totalOverflow() {
 		return
 	}
-	// Total overflow. Shrink cold.
+	c.log.Debug("Total overflow.")
 	c.cold().shrink(c.coldLimit(), now)
 
-	if !c.warmOverflow() {
-		return
+	if c.warmOverflow() {
+		// Some active cold become warm now.
+		c.log.Debug("Warm overflow.")
+		c.warm().shrink(c.limits.warm, now)
 	}
-	// Some some active cold flow to warm. Need to shrink warm.
-	c.warm().shrink(c.limits.warm, now)
 
-	if !c.overflow() {
+	if !c.totalOverflow() {
 		return
 	}
-	// There was too many active colds, that became warm.
-	// There are no active colds now, so we can evict them.
+	c.log.Debug("Total overflow not fixed yet. Evict previous warm inactive items.")
 	c.cold().shrink(c.coldLimit(), now)
 
-	if c.overflow() {
+	if c.totalOverflow() {
 		panic("Overflow after cache eviction. Should not happen.")
 	}
 }
@@ -191,18 +201,22 @@ func (c *cache) deleteDetached(n *node) {
 	}
 }
 
-func (c *cache) hot() *lru          { return &c.lrus[hot] }
-func (c *cache) warm() *lru         { return &c.lrus[warm] }
-func (c *cache) cold() *lru         { return &c.lrus[cold] }
-func (c *cache) free() int64        { return c.limits.total - c.size() }
-func (c *cache) coldLimit() int64   { return c.cold().size + c.free() }
-func (c *cache) hotOverflow() bool  { return c.lrus[hot].size > c.limits.hot }
-func (c *cache) warmOverflow() bool { return c.lrus[warm].size > c.limits.warm }
-func (c *cache) overflow() bool     { return c.free() < 0 }
+func (c *cache) hot() *lru           { return c.lrus[hot] }
+func (c *cache) warm() *lru          { return c.lrus[warm] }
+func (c *cache) cold() *lru          { return c.lrus[cold] }
+func (c *cache) free() int64         { return c.limits.total - c.size() }
+func (c *cache) coldLimit() int64    { return c.cold().size + c.free() }
+func (c *cache) hotOverflow() bool   { return c.hot().size > c.limits.hot }
+func (c *cache) warmOverflow() bool  { return c.warm().size > c.limits.warm }
+func (c *cache) totalOverflow() bool { return c.free() < 0 }
+
+func (c *cache) itemsNum() int {
+	return len(c.table)
+}
 
 func (c *cache) size() int64 {
 	var size int64
-	for i := range c.lrus[:] {
+	for i := range c.lrus {
 		size += c.lrus[i].size
 	}
 	return size
