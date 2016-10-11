@@ -9,11 +9,13 @@ import (
 
 var RandSource = rand.NewSource(GinkgoRandomSeed())
 var Rand = rand.New(RandSource)
-var Fuzz = func() *fuzz.Fuzzer {
+var Fuzzer = func() *fuzz.Fuzzer {
 	f := fuzz.New()
 	f.RandSource(RandSource)
 	return f
-}
+}()
+var Fuzz = Fuzzer.Fuzz
+
 var FastRand = fastRandReader{}
 
 type fastRandReader struct{}

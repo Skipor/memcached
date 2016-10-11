@@ -76,14 +76,14 @@ var _ = Describe("Conn", func() {
 		connReader, in = io.Pipe()
 		connMeta = &ConnMeta{
 			Cache: mcache,
-			Log:   log.NewLogger(log.DebugLevel, GinkgoWriter),
 		}
 		connMeta.init()
 		rwc := struct {
 			io.ReadCloser
 			io.Writer
 		}{connReader, out.buf}
-		c = newConn(connMeta, rwc)
+		l := log.NewLogger(log.DebugLevel, GinkgoWriter)
+		c = newConn(l, connMeta, rwc)
 		go func() {
 			defer GinkgoRecover()
 			c.serve()
@@ -95,7 +95,7 @@ var _ = Describe("Conn", func() {
 		in.Close()
 		Eventually(serveFinished).Should(BeClosed())
 		Expect(out).NotTo(Say(Anything))
-		Expect(func() { mcache.AssertExpectations(GinkgoT()) }).NotTo(Panic())
+		mcache.AssertExpectations(GinkgoT())
 	})
 
 	AssertSay := func(pattern string) {

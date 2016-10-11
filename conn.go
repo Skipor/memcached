@@ -7,6 +7,7 @@ import (
 
 	"github.com/facebookgo/stackerr"
 	"github.com/skipor/memcached/cache"
+	"github.com/skipor/memcached/log"
 )
 
 type conn struct {
@@ -14,26 +15,28 @@ type conn struct {
 	*bufio.Writer
 	closer io.Closer
 	*ConnMeta
+	log log.Logger
 }
 
-func newConn(m *ConnMeta, rwc io.ReadWriteCloser) *conn {
+func newConn(l log.Logger, m *ConnMeta, rwc io.ReadWriteCloser) *conn {
 	return &conn{
 		reader:   newReader(rwc, m.Pool),
 		Writer:   bufio.NewWriterSize(rwc, OutBufferSize),
 		closer:   rwc,
 		ConnMeta: m,
+		log:      l,
 	}
 }
 
 func (c *conn) serve() {
-	c.Log.Debug("Serve connection.")
+	c.log.Debug("Serve connection.")
 	defer func() {
 		if r := recover(); r != nil {
 			c.serverError(stackerr.Newf("Panic: %s", r))
 			panic(c)
 		}
 		c.Close()
-		c.Log.Debug("Connection closed.")
+		c.log.Debug("Connection closed.")
 	}()
 
 	err := c.loop()
@@ -58,7 +61,7 @@ func (c *conn) loop() error {
 			return stackerr.Wrap(err)
 		}
 		if clientErr == nil {
-			c.Log.Debugf("Command: %s.", command)
+			c.log.Debugf("Command: %s.", command)
 			switch string(command) { // No allocation.
 			case GetCommand, GetsCommand:
 				clientErr, err = c.get(fields)
@@ -67,7 +70,7 @@ func (c *conn) loop() error {
 			case DeleteCommand:
 				clientErr, err = c.delete(fields)
 			default:
-				c.Log.Error("Unexpected command: %s", command)
+				c.log.Error("Unexpected command: %s", command)
 				err = c.sendResponse(ErrorResponse)
 			}
 		}
@@ -99,7 +102,7 @@ func (c *conn) get(fields [][]byte) (clientErr, err error) {
 }
 
 func (c *conn) sendGetResponse(views []cache.ItemView) error {
-	c.Log.Debugf("Sending %v founded values.", len(views))
+	c.log.Debugf("Sending %v founded values.", len(views))
 	var readerIndex int
 	defer func() {
 		// Close readers which was not successfully readed.
@@ -109,7 +112,7 @@ func (c *conn) sendGetResponse(views []cache.ItemView) error {
 	}()
 	for ; readerIndex < len(views); readerIndex++ {
 		view := views[readerIndex]
-		c.Log.Debugf("Sending value %v. Key %s.", readerIndex, view.Key)
+		c.log.Debugf("Sending value %v. Key %s.", readerIndex, view.Key)
 		c.WriteString(ValueResponse)
 		c.WriteByte(' ')
 		c.WriteString(view.Key)
@@ -179,7 +182,7 @@ func (c *conn) delete(fields [][]byte) (clientErr, err error) {
 }
 
 func (c *conn) serverError(err error) {
-	c.Log.Error("Server error: ", err)
+	c.log.Error("Server error: ", err)
 	if err == io.ErrUnexpectedEOF {
 		return
 	}
@@ -188,7 +191,7 @@ func (c *conn) serverError(err error) {
 }
 
 func (c *conn) sendClientError(err error) error {
-	c.Log.Error("Client error: ", err)
+	c.log.Error("Client error: ", err)
 	err = unwrap(err)
 	return c.sendResponse(fmt.Sprintf("%s %s", ClientErrorResponse, err))
 }

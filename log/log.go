@@ -3,6 +3,7 @@
 package log
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +26,17 @@ type Logger interface {
 	Fatalf(format string, args ...interface{})
 	Panic(args ...interface{})
 	Panicf(format string, args ...interface{})
+	WithFields(keyValues LogFields) Logger
+	Fields() Fields
 }
+
+type LogFields interface {
+	Fields() map[string]interface{}
+}
+
+type Fields map[string]interface{}
+
+func (f Fields) Fields() map[string]interface{} { return f }
 
 type Level int
 
@@ -86,9 +97,30 @@ func NewLoggerSink(l Level, s Sink) Logger {
 
 // logger is primitive stdlib log.Logger wrapper for more common interface.
 type logger struct {
-	sink  Sink
-	level Level
-	depth int
+	sink   Sink
+	level  Level
+	depth  int
+	fields Fields
+}
+
+func (l *logger) Fields() Fields { return l.fields }
+
+func (l *logger) WithFields(keyValues LogFields) Logger {
+	copy := *l
+
+	extraFields := keyValues.Fields()
+	if copy.fields == nil {
+		copy.fields = extraFields
+	} else {
+		copy.fields = make(Fields, len(l.fields)+len(extraFields))
+		for k, v := range l.fields {
+			copy.fields[k] = v
+		}
+		for k, v := range extraFields {
+			copy.fields[k] = v
+		}
+	}
+	return &copy
 }
 
 func (l *logger) Debug(args ...interface{})                 { l.log(DebugLevel, args...) }
@@ -119,28 +151,38 @@ func (l *logger) Fatalf(format string, args ...interface{}) {
 }
 
 type Sink interface {
-	Output(callDepth int, l Level, msg string)
+	Output(callDepth int, formated string)
 }
 
 type stdSink struct {
 	std *log.Logger
 }
 
-func (s *stdSink) Output(callDepth int, l Level, msg string) {
-	s.std.Output(callDepth+1, l.String()+": "+msg)
+func (s *stdSink) Output(callDepth int, formated string) {
+	s.std.Output(callDepth+1, formated)
 }
 
 const initialLoggerCallDepth = 3
 
 func (l *logger) log(level Level, args ...interface{}) {
 	if level >= l.level {
-		l.sink.Output(l.depth+initialLoggerCallDepth, level, fmt.Sprint(args...))
+		l.sink.Output(l.depth+initialLoggerCallDepth, level, l.fields, fmt.Sprint(args...))
 	}
 }
 
 func (l *logger) logf(level Level, format string, args ...interface{}) {
-
 	if level >= l.level {
-		l.sink.Output(l.depth+initialLoggerCallDepth, level, fmt.Sprintf(format, args...))
+		l.sink.Output(l.depth+initialLoggerCallDepth, level, l.fields, fmt.Sprintf(format, args...))
 	}
+}
+
+func format(l Level, f Fields, msg string) string {
+	if len(f) == 0 {
+		return l.String() + ": " + msg
+	}
+	fBytes, err := json.Marshal(f)
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%s: %s %s", l.String(), fBytes, msg)
 }

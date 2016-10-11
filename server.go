@@ -13,12 +13,13 @@ import (
 type Server struct {
 	Addr string
 	ConnMeta
+	Log         log.Logger
+	connCounter int64
 }
 
 // ConnMeta is data shared between connections.
 type ConnMeta struct {
 	Cache       cache.Cache
-	Log         log.Logger
 	Pool        *recycle.Pool
 	MaxItemSize int
 }
@@ -61,17 +62,23 @@ func (s *Server) Serve(l net.Listener) error {
 }
 
 func (s *Server) newConn(c net.Conn) *conn {
-	return newConn(&s.ConnMeta, c)
+	conn := newConn(s.Log.WithFields(log.Fields{"conn": c}), &s.ConnMeta, c)
+	s.connCounter++
+	return conn
 }
 
-func (s *ConnMeta) init() {
+func (s *Server) init() {
 	if s.Log == nil {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
 	}
-	if s.Pool == nil {
-		s.Pool = recycle.NewPool()
+	s.ConnMeta.init()
+}
+
+func (m *ConnMeta) init() {
+	if m.Pool == nil {
+		m.Pool = recycle.NewPool()
 	}
-	if s.MaxItemSize == 0 {
-		s.MaxItemSize = DefaultMaxItemSize
+	if m.MaxItemSize == 0 {
+		m.MaxItemSize = DefaultMaxItemSize
 	}
 }
