@@ -46,13 +46,13 @@ func NewCache(l log.Logger, conf Config) Cache {
 		lru.init()
 		lru.onExpire = c.onExpire
 	}
-	c.hot().onEvictActive = moveToTail
-	c.warm().onEvictActive = moveToTail
-	c.cold().onEvictActive = moveTo(c.warm())
+	c.hot().onActive = attachAsInactive
+	c.warm().onActive = attachAsInactive
+	c.cold().onActive = moveTo(c.warm())
 
-	c.hot().onEvictInactive = moveTo(c.cold())
-	c.warm().onEvictInactive = moveTo(c.cold())
-	c.cold().onEvictInactive = c.onEvict
+	c.hot().onInactive = moveTo(c.cold())
+	c.warm().onInactive = moveTo(c.cold())
+	c.cold().onInactive = c.onEvict
 	return c
 }
 
@@ -122,6 +122,7 @@ func (c *cache) Get(keys ...[]byte) (views []ItemView) {
 	for _, key := range keys {
 		if n, ok := c.table[string(key)]; ok { // No allocation.
 			if !n.expired(now) {
+				n.setActive()
 				views = append(views, n.NewView())
 			}
 		}
@@ -133,8 +134,8 @@ func (c *cache) Delete(key []byte) (deleted bool) {
 	c.Lock()
 	defer c.Unlock()
 	n, ok := c.table[string(key)] // No allocation.
-	link(n.prev, n.next)
-	c.delete(n)
+	n.detach()
+	c.deleteDetached(n)
 	return ok
 }
 
@@ -153,7 +154,7 @@ func (c *cache) fixOverflows() {
 		return
 	}
 	// Some some active cold flow to warm. Need to shrink warm.
-	c.cold().shrink(c.coldLimit(), now)
+	c.warm().shrink(c.limits.warm, now)
 
 	if !c.overflow() {
 		return
@@ -167,21 +168,19 @@ func (c *cache) fixOverflows() {
 	}
 }
 
-// onEvict is callback for lru.
 func (c *cache) onEvict(n *node) {
 	c.log.Debugf("Item %s evicted.", n.Key)
-	c.delete(n)
+	c.deleteDetached(n)
 }
 
-// onExpire is callback for lru.
 func (c *cache) onExpire(n *node) {
 	c.log.Debugf("Item %s expired.", n.Key)
-	c.delete(n)
+	c.deleteDetached(n)
 }
 
-// delete removes owned but detached from lru list node.
-func (c *cache) delete(n *node) {
-	n.owner.size -= n.size()
+// delete removes owned but detached node.
+func (c *cache) deleteDetached(n *node) {
+	n.disown()
 	n.Data.Recycle()
 	delete(c.table, string(n.Key))
 	if tag.Debug {
