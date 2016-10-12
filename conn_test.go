@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"runtime"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -164,7 +165,7 @@ var _ = Describe("Conn", func() {
 		)
 		BeforeEach(func() {
 			meta.Key = "test_key"
-			meta.Exptime = Rand.Int63n(MaxRelativeExptime)
+			meta.Exptime = Rand.Int63n(time.Now().Unix()) + MaxRelativeExptime
 			meta.Flags = Rand.Uint32()
 			meta.Bytes = Rand.Intn(connMeta.MaxItemSize)
 		})

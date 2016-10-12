@@ -2,13 +2,13 @@ package cache
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	"github.com/onsi/gomega/format"
+
 	"github.com/skipor/memcached/recycle"
 	. "github.com/skipor/memcached/testutil"
 )
@@ -18,6 +18,16 @@ func TestCache(t *testing.T) {
 	format.UseStringerRepresentation = true
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Cache Suite")
+}
+
+func ExpectViewOfItem(view ItemView, it Item) {
+	ExpectWithOffset(1, view.ItemMeta).To(BeIdenticalTo(it.ItemMeta))
+	itReader := it.NewView().Reader
+	expectedData, _ := ioutil.ReadAll(itReader)
+	actualData, _ := ioutil.ReadAll(view.Reader)
+	itReader.Close()
+	view.Reader.Close()
+	ExpectBytesEqual(actualData, expectedData)
 }
 
 func (l *lru) ExpectInvariantsOk() {
@@ -79,10 +89,6 @@ var testKey, resetTestKeys = func() (k func() string, rk func()) {
 	return
 }()
 
-func now() int64 {
-	return time.Now().Unix()
-}
-
 type testPool struct{ *recycle.Pool }
 
 func newTestPool() testPool {
@@ -91,7 +97,7 @@ func newTestPool() testPool {
 
 func (p testPool) testItem() (i Item) {
 	i.Key = testKey()
-	i.Exptime = now() + 100
+	i.Exptime = nowUnix() + 100
 	i.Bytes = testNodeSize - int((&node{Item: i}).size())
 	i.Data, _ = p.ReadData(Rand, i.Bytes)
 	return
@@ -103,12 +109,13 @@ func (p testPool) testNode() *node {
 
 func testNode() *node {
 	n := expiredNode()
-	n.Exptime = now() + 100
+	n.Exptime = nowUnix() + 100
 	return n
 }
 
 func expiredNode() *node {
 	n := newNode(Item{ItemMeta{Key: testKey()}, nil})
+	n.Exptime = 1
 	n.Bytes = testNodeSize - int(n.size())
 	return n
 }

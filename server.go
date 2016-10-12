@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/skipor/memcached/cache"
+	"github.com/skipor/memcached/internal/tag"
 	"github.com/skipor/memcached/log"
 	"github.com/skipor/memcached/recycle"
 )
@@ -74,7 +75,12 @@ func (s *Server) init() {
 	s.ConnMeta.init()
 	maxChunkSize := s.Pool.MaxChunkSize()
 	if maxChunkSize < InBufferSize || maxChunkSize < OutBufferSize {
-		s.Log.Panic("Too small max chunk size. It should be larger than buffers size, to zero copy send of large items.")
+		s.Log.Panic("Too small max chunk size. It should be larger than buffers size, for zero copy send of large items.")
+	}
+	if tag.Debug {
+		s.Pool.SetLeakCallback(func(d *recycle.Data) {
+			s.Log.Errorf("recycle.Data leak. Ptr: %p", d)
+		})
 	}
 }
 

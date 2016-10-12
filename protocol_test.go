@@ -415,7 +415,7 @@ var _ = Describe("parse set fields", func() {
 				Expect(m.Flags).To(Equal(flags))
 				Expect(m.Bytes).To(Equal(bytes))
 				Expect(noreply).To(Equal(expectedNoreply))
-				if exptime > MaxRelativeExptime {
+				if exptime < MaxRelativeExptime {
 					exptime += time.Now().Unix()
 				}
 				Expect([]int64{m.Exptime - 1, m.Exptime}).To(ContainElement(exptime))

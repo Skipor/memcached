@@ -95,18 +95,31 @@ var _ Cache = (*cache)(nil)
 func (c *cache) Set(i Item) {
 	c.Lock()
 	defer c.Unlock()
-
+	defer c.checkInvariants()
+	now := nowUnix()
+	expired := i.expired(now)
+	if expired {
+		c.log.Warn("Set expired item.")
+	}
 	n, ok := c.table[i.Key]
+	var wasActive bool
 	if ok {
-		c.log.Debugf("Override item %s.", i.Key)
-		n.Data.Recycle()
-		n.Item = i
+		c.log.Debugf("Remove old item %s value.", i.Key)
+		wasActive = n.isActive()
+		n.detach()
+		c.deleteDetached(n)
+	}
+	if expired {
+		c.log.Warn("Skip add of expired item.")
+		i.Data.Recycle()
+		return
+	}
+	c.log.Debugf("Add item %s.", i.Key)
+	n = newNode(i)
+	c.table[i.Key] = n
+	c.lrus[hot].push(n)
+	if wasActive {
 		n.active = active
-	} else {
-		c.log.Debugf("Add item %s.", i.Key)
-		n = newNode(i)
-		c.table[i.Key] = n
-		c.lrus[hot].push(n)
 	}
 
 	if n.size() > c.limits.hot {
@@ -124,6 +137,8 @@ func (c *cache) Set(i Item) {
 func (c *cache) Get(keys ...[]byte) (views []ItemView) {
 	c.RLock()
 	defer c.RUnlock()
+	defer c.checkInvariants()
+	c.log.Debug("get %v", keys)
 	now := time.Now().Unix()
 	for _, key := range keys {
 		if n, ok := c.table[string(key)]; ok { // No allocation.
@@ -139,6 +154,7 @@ func (c *cache) Get(keys ...[]byte) (views []ItemView) {
 func (c *cache) Delete(key []byte) (deleted bool) {
 	c.Lock()
 	defer c.Unlock()
+	defer c.checkInvariants()
 	n, ok := c.table[string(key)] // No allocation.
 	if !ok {
 		return false
@@ -237,3 +253,7 @@ var _ sync.Locker = nopUnlocker{}
 
 func (nopUnlocker) Lock()   { panic("should not be called") }
 func (nopUnlocker) Unlock() {}
+
+func nowUnix() int64 {
+	return time.Now().Unix()
+}

@@ -113,7 +113,7 @@ func parseSetFields(fields [][]byte) (m cache.ItemMeta, noreply bool, err error)
 	}
 	m.Flags = uint32(parsed[0])
 	m.Exptime = int64(parsed[1])
-	if m.Exptime > MaxRelativeExptime {
+	if m.Exptime < MaxRelativeExptime {
 		m.Exptime += time.Now().Unix()
 	}
 	m.Bytes = int(parsed[2])

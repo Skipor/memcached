@@ -75,7 +75,28 @@ var _ = Describe("Cache", func() {
 		})
 	})
 
-	Context("invariants check", func() {
+	const k = 7
+	var it []Item
+	Key := func(i int) []byte { return []byte(it[i].Key) }
+	Node := func(i int) *node { return c.table[it[i].Key] }
+	Touch := func(i int) {
+		views := c.Get([]byte(it[i].Key))
+		views[0].Reader.Close()
+	}
+	BeforeEach(func() {
+		it = nil
+		for i := 0; i < k; i++ {
+			it = append(it, p.testItem())
+		}
+	})
+	ExpectContainsItem := func(i Item) {
+		views := c.Get([]byte(i.Key))
+		Expect(views).To(HaveLen(1))
+		ExpectViewOfItem(views[0], i)
+		Expect(views).To(HaveLen(1))
+	}
+
+	Context("behaviour", func() {
 		AfterEach(func() { c.ExpectInvariantsOk() })
 		It("init", func() {})
 		Context("set", func() {
@@ -84,7 +105,8 @@ var _ = Describe("Cache", func() {
 					BESetHotWarmLimit(hwl)
 					It("", func() {
 						for i := 0; i < k; i++ {
-							c.Set(p.testItem())
+							c.Set(it[i])
+							ExpectContainsItem(it[i])
 						}
 					})
 				})
@@ -99,57 +121,52 @@ var _ = Describe("Cache", func() {
 					CheckLeaks()
 				})
 				It("", func() {
-					it1 := p.testItem()
-					c.Set(it1)
-					it2 := p.testItem()
-					it2.Key = it1.Key
-					c.Set(it2)
-					Expect(c.hot().items()).To(ConsistOf(it2))
+					c.Set(it[0])
+					it[1].Key = it[0].Key
+					it[1].Bytes -= 1 // Check that different size does not break invariant.
+					c.Set(it[1])
+					Expect(c.hot().items()).To(ConsistOf(it[1]))
+					ExpectContainsItem(it[1])
 				})
-
 			})
-
 		})
 
 		Context("delete", func() {
 			BESetHotWarmLimit(1)
+			// TODO get test
 			It("not found", func() {
-				c.Set(p.testItem())
-				c.Delete([]byte(testKey()))
+				c.Set(it[0])
+				deleted := c.Delete(Key(1))
 				Expect(c.itemsNum()).To(Equal(1))
+				Expect(deleted).To(BeFalse())
+				ExpectContainsItem(it[0])
 			})
 
 			BeforeEach(CheckLeaks)
 			It("found", func() {
-				i := p.testItem()
-				c.Set(i)
-				c.Delete([]byte(i.Key))
+				c.Set(it[0])
+				deleted := c.Delete(Key(0))
 				Expect(c.itemsNum()).To(BeZero())
+				Expect(deleted).To(BeTrue())
+				Expect(c.Get(Key(0))).To(BeEmpty())
 			})
 		})
 	})
-	Context("behaviour", func() {
+
+	Context("item flow", func() {
 		BESetHotWarmLimit(1)
 		AfterEach(func() { c.ExpectInvariantsOk() })
-		const k = 7
-		var it []Item
-		Node := func(i int) *node { return c.table[it[i].Key] }
-		Touch := func(i int) {
-			views := c.Get([]byte(it[i].Key))
-			views[0].Reader.Close()
-		}
-		BeforeEach(func() {
-			it = nil
-			for i := 0; i < k; i++ {
-				it = append(it, p.testItem())
-			}
-		})
 
-		It("active after overwrite", func() {
+		It("active after active overwrite", func() {
 			c.Set(it[0])
-			Expect(c.table[it[0].Key].isActive()).To(BeFalse())
+			Touch(0)
 			c.Set(it[0])
 			Expect(Node(0).isActive()).To(BeTrue())
+		})
+		It("inactive after inactive overwrite", func() {
+			c.Set(it[0])
+			c.Set(it[0])
+			Expect(Node(0).isActive()).To(BeFalse())
 		})
 		It("active after get", func() {
 			c.Set(it[0])
@@ -217,7 +234,7 @@ var _ = Describe("Cache", func() {
 			}
 
 			By("expired evicted by inactive")
-			Node(4).Exptime = now() - 1
+			Node(4).Exptime = nowUnix() - 1
 			// h:{it4*}, w:{it1}, c:{it2}
 			c.Set(it[5])
 			// it5 evict expired hot it4

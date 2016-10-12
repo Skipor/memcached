@@ -135,6 +135,8 @@ func (c *conn) set(fields [][]byte) (clientErr, err error) {
 		err = c.discardCommand()
 		return
 	}
+	c.log.Debugf("set %#v", i.ItemMeta)
+
 	if i.Bytes > c.MaxItemSize {
 		clientErr = stackerr.Wrap(ErrTooLargeItem)
 		_, err = c.Discard(i.Bytes + len(Separator))
@@ -164,6 +166,7 @@ func (c *conn) delete(fields [][]byte) (clientErr, err error) {
 	if clientErr != nil {
 		return
 	}
+	c.log.Debugf("delete %s; noreply: %v", key, noreply)
 
 	deleted := c.Cache.Delete(key)
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/skipor/memcached"
 	"github.com/skipor/memcached/cache"
+	"github.com/skipor/memcached/internal/tag"
 	"github.com/skipor/memcached/log"
 	"github.com/skipor/memcached/recycle"
 )
@@ -56,38 +57,6 @@ func init() {
 	}
 }
 
-type Flags struct {
-	ConfigPath string
-	InputConfig
-}
-
-// NOTE: without "only stdlib" constraint I would
-// github.com/spf13/viper and with custom github.com/mitchellh/mapstructure decode hooks
-// for configuration and github.com/spf13/cobra for CLI.
-// NOTE: for simplicity configure only from file.
-func parseFlags() Flags {
-	var f Flags
-	flag.StringVar(&f.ConfigPath, "config", "", "path to json config")
-
-	def := DefaultInputConfig()
-	usage := func(usage string, defVal interface{}) string {
-		if _, ok := defVal.(string); ok {
-			usage += fmt.Sprintf(" (default %q)", defVal)
-		} else {
-			usage += fmt.Sprintf(" (default %v)", defVal)
-		}
-		return usage
-	}
-	flag.StringVar(&f.Host, "host", "", usage("host address to bind", def.Host))
-	flag.IntVar(&f.Port, "port", 0, usage("port num", def.Port))
-	flag.StringVar(&f.LogDestination, "log-destination", "", usage("log destination: stederr, stdout or file path", def.LogDestination))
-	flag.StringVar(&f.LogLevel, "log-level", "", usage("log level: debug, info, warn, error, fatal", def.LogLevel))
-	flag.StringVar(&f.CacheSize, "cache-size", "", usage("cache size: 2g, 64m", def.CacheSize))
-	flag.StringVar(&f.MaxItemSize, "max-item-size", "", usage("max item size: 10m, 1024k", def.MaxItemSize))
-	flag.Parse()
-	return f
-}
-
 type Config struct {
 	Addr           string
 	LogDestination io.Writer
@@ -97,6 +66,7 @@ type Config struct {
 }
 
 func main() {
+	// TODO pprof monitoring on configurable port
 	conf := config()
 	l := log.NewLogger(conf.LogLevel, conf.LogDestination)
 	c := cache.NewCache(l, cache.Config{Size: conf.CacheSize})
@@ -110,6 +80,9 @@ func main() {
 		},
 	}
 	l.Debugf("Config: %#v", conf)
+	if tag.Debug {
+		l.Warn("Using debug build. It has more runtime checks and large peromance overhead.")
+	}
 
 	l.Info("Serve on ", s.Addr)
 	err := s.ListenAndServe()
@@ -164,6 +137,38 @@ func parseConfig(l log.Logger, fileConf *InputConfig) *Config {
 	return parsed
 }
 
+type Flags struct {
+	ConfigPath string
+	InputConfig
+}
+
+// NOTE: without "only stdlib" constraint I would
+// github.com/spf13/viper and with custom github.com/mitchellh/mapstructure decode hooks
+// for configuration and github.com/spf13/cobra for CLI.
+// NOTE: for simplicity configure only from file.
+func parseFlags() Flags {
+	var f Flags
+	flag.StringVar(&f.ConfigPath, "config", "", "path to json config")
+
+	def := DefaultInputConfig()
+	usage := func(usage string, defVal interface{}) string {
+		if _, ok := defVal.(string); ok {
+			usage += fmt.Sprintf(" (default %q)", defVal)
+		} else {
+			usage += fmt.Sprintf(" (default %v)", defVal)
+		}
+		return usage
+	}
+	flag.StringVar(&f.Host, "host", "", usage("host address to bind", def.Host))
+	flag.IntVar(&f.Port, "port", 0, usage("port num", def.Port))
+	flag.StringVar(&f.LogDestination, "log-destination", "", usage("log destination: stederr, stdout or file path", def.LogDestination))
+	flag.StringVar(&f.LogLevel, "log-level", "", usage("log level: debug, info, warn, error, fatal", def.LogLevel))
+	flag.StringVar(&f.CacheSize, "cache-size", "", usage("cache size: 2g, 64m", def.CacheSize))
+	flag.StringVar(&f.MaxItemSize, "max-item-size", "", usage("max item size: 10m, 1024k", def.MaxItemSize))
+	flag.Parse()
+	return f
+}
+
 func parseSize(s string) (size int64, err error) {
 	if len(s) < 2 {
 		err = errors.New("Invalid size format.")
@@ -213,7 +218,8 @@ func mergeConfigs(def, override *InputConfig) {
 	overrideVal := reflect.ValueOf(override).Elem()
 	for i, end := 0, defVal.NumField(); i < end; i++ {
 		overrideVal := overrideVal.Field(i)
-		if overrideVal.Interface() != reflect.Zero(overrideVal.Type()).Interface() {
+		isZeroVal := overrideVal.Interface() == reflect.Zero(overrideVal.Type()).Interface()
+		if !isZeroVal {
 			defVal.Field(i).Set(overrideVal)
 		}
 	}

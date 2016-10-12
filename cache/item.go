@@ -19,7 +19,7 @@ type ItemMeta struct {
 }
 
 func (m ItemMeta) expired(now int64) bool {
-	return m.Exptime < now
+	return m.Exptime != 0 && m.Exptime < now
 }
 
 func (i Item) NewView() ItemView {

@@ -100,7 +100,12 @@ var _ = Describe("LRU", func() {
 			Expect(l.nodes()).To(ConsistOf(an2))
 			Expect(otherLRU.nodes()).To(ConsistOf(ian, an1))
 		})
-
 	})
+})
 
+var _ = Describe("Item", func() {
+	It("zero exprime no expire", func() {
+		m := ItemMeta{Exptime: 0}
+		Expect(m.expired(nowUnix())).To(BeFalse())
+	})
 })
