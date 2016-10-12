@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Logger interface is subset of github.com/uber-common/bark.Logger methods.
@@ -73,13 +74,13 @@ var stringToLevel = func() map[string]Level {
 	return res
 }()
 
-func LevelFromString(s string) (Level, error) {
-	var err error
-	l, ok := stringToLevel[s]
+func LevelFromString(s string) (l Level, err error) {
+	var ok bool
+	l, ok = stringToLevel[strings.ToUpper(s)]
 	if !ok {
 		err = errors.New("invalid level " + s)
 	}
-	return l, err
+	return
 }
 
 const stdLoggerFlags = log.LstdFlags | log.Lmicroseconds | log.Lshortfile

@@ -62,7 +62,7 @@ func (s *Server) Serve(l net.Listener) error {
 }
 
 func (s *Server) newConn(c net.Conn) *conn {
-	conn := newConn(s.Log.WithFields(log.Fields{"conn": c}), &s.ConnMeta, c)
+	conn := newConn(s.Log.WithFields(log.Fields{"conn": s.connCounter}), &s.ConnMeta, c)
 	s.connCounter++
 	return conn
 }
@@ -72,6 +72,10 @@ func (s *Server) init() {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
 	}
 	s.ConnMeta.init()
+	maxChunkSize := s.Pool.MaxChunkSize()
+	if maxChunkSize < InBufferSize || maxChunkSize < OutBufferSize {
+		s.Log.Panic("Too small max chunk size. It should be larger than buffers size, to zero copy send of large items.")
+	}
 }
 
 func (m *ConnMeta) init() {

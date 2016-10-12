@@ -1,0 +1,7 @@
+{
+  "port":11211,
+  "log-destination":"stderr",
+  "log-level":"info",
+  "cache-size":"64m",
+  "max-item-size":"1m"
+}
