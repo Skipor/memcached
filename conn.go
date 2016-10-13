@@ -52,7 +52,7 @@ func (c *conn) Close() error {
 
 func (c *conn) loop() error {
 	for {
-		command, fields, clientErr, err := c.readCommand()
+		_, command, fields, clientErr, err := c.readCommand()
 		if err != nil {
 			if err == io.EOF {
 				// Just client disconnect. Ok.

@@ -159,10 +159,9 @@ func newReader(r io.Reader, p *recycle.Pool) reader {
 }
 
 // WARN: retuned byte slices points into read buffed and invalidated after next read.
-func (r reader) readCommand() (command []byte, fields [][]byte, clientErr, err error) {
-	var lineWithSeparator []byte
+func (r reader) readCommand() (raw, command []byte, fields [][]byte, clientErr, err error) {
 	// We accept only "\r\n" separator, so can't use ReadLine here.
-	lineWithSeparator, err = r.ReadSlice('\n')
+	raw, err = r.ReadSlice('\n')
 	if err == bufio.ErrBufferFull {
 		// Too big command.
 		clientErr = stackerr.Wrap(ErrTooLargeCommand)
@@ -170,7 +169,7 @@ func (r reader) readCommand() (command []byte, fields [][]byte, clientErr, err e
 		return
 	}
 	if err == io.EOF {
-		if len(lineWithSeparator) != 0 {
+		if len(raw) != 0 {
 			err = stackerr.Wrap(io.ErrUnexpectedEOF)
 		}
 		return
@@ -179,11 +178,11 @@ func (r reader) readCommand() (command []byte, fields [][]byte, clientErr, err e
 		err = stackerr.Wrap(err)
 		return
 	}
-	if !bytes.HasSuffix(lineWithSeparator, separatorBytes) {
+	if !bytes.HasSuffix(raw, separatorBytes) {
 		clientErr = stackerr.Wrap(ErrInvalidLineSeparator)
 		return
 	}
-	line := bytes.TrimSuffix(lineWithSeparator, separatorBytes)
+	line := bytes.TrimSuffix(raw, separatorBytes)
 	split := bytes.Fields(line)
 	if len(split) == 0 {
 		clientErr = stackerr.Wrap(ErrEmptyCommand)

@@ -24,15 +24,16 @@ var _ = Describe("reader", func() {
 	var (
 		input          *bytes.Buffer
 		r              reader
-		command        []byte
+		raw, command   []byte
 		fields         [][]byte
 		clientErr, err error
 	)
 	ReadCmd := func() {
-		command, fields, clientErr, err = r.readCommand()
+		raw, command, fields, clientErr, err = r.readCommand()
 	}
 
 	const correctCommand = "get xxx   yyy " + Separator
+	var expectedRaw = []byte(correctCommand)
 	var expectedCommand = []byte("get")
 	var expectedFields = [][]byte{[]byte("xxx"), []byte("yyy")}
 
@@ -43,6 +44,7 @@ var _ = Describe("reader", func() {
 	ExpectCommandReaded := func() {
 		ReadCmd()
 		ExpectNoErrors()
+		Expect(raw).To(Equal(expectedRaw))
 		Expect(command).To(Equal(expectedCommand))
 		Expect(fields).To(Equal(expectedFields))
 	}

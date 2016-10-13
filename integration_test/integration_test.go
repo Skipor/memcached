@@ -109,7 +109,7 @@ var _ = Describe("Integration", func() {
 			ExpectItemsEqual(v, items[k])
 		}
 	})
-	FContext("load", func() {
+	Context("load", func() {
 		It("", func() {
 			LoadTest(addr)
 		})
