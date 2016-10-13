@@ -67,8 +67,14 @@ func (l *lru) shrink(toSize int64, now int64) {
 	if toSize < 0 {
 		panic(fmt.Sprintf("try shrink to negative size %v", toSize))
 	}
+	l.shrinkWhile(func() bool {
+		return toSize < l.size
+	}, now)
+}
+
+func (l *lru) shrinkWhile(while func() bool, now int64) {
 	cur, next := l.head(), l.head().next
-	for ; toSize < l.size; cur, next = next, next.next {
+	for ; while(); cur, next = next, next.next {
 		l.assertNotTail(cur)
 		if tag.Debug {
 			cur.prev = nil
@@ -89,6 +95,7 @@ func (l *lru) shrink(toSize int64, now int64) {
 func (l *lru) head() *node      { return l.fakeHead.next }
 func (l *lru) tail() *node      { return l.fakeTail.prev }
 func (l *lru) end(n *node) bool { return n == l.fakeTail }
+func (l *lru) empty() bool      { return l.size == 0 }
 
 type node struct {
 	Item

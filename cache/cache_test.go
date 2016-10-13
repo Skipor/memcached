@@ -75,7 +75,7 @@ var _ = Describe("Cache", func() {
 		})
 	})
 
-	const k = 7
+	const k = 10
 	var it []Item
 	Key := func(i int) []byte { return []byte(it[i].Key) }
 	Node := func(i int) *node { return c.table[it[i].Key] }
@@ -242,6 +242,33 @@ var _ = Describe("Cache", func() {
 			Expect(c.hot().items()).To(ConsistOf(it[5]))
 			Expect(c.warm().items()).To(ConsistOf(it[1]))
 			Expect(c.cold().items()).To(ConsistOf(it[2]))
+		})
+	})
+
+	Context("total owerflow with empty warm and active cold", func() {
+		const limit = 6
+		BeforeEach(func() {
+			hotWarmLimit = limit / 3
+		})
+
+		It("overflow fixed", func() {
+			for i := 0; i < limit; i++ {
+				c.Set(it[i])
+			}
+			Expect(c.itemsNum()).To(Equal(limit))
+
+			sep := int(hotWarmLimit * 2)
+			Expect(c.hot().items()).To(ConsistOf(it[sep:limit]))
+			Expect(c.cold().items()).To(ConsistOf(it[:sep]))
+			// Set cold items active.
+			for i := 0; i < sep; i++ {
+				Touch(i)
+			}
+			c.Set(it[limit])
+			Expect(c.itemsNum()).To(Equal(limit))
+			Expect(c.hot().items()).To(ConsistOf(it[sep+1 : limit+1]))
+			Expect(c.warm().items()).To(ConsistOf(it[hotWarmLimit:sep]))
+			Expect(c.cold().items()).To(ConsistOf(it[:hotWarmLimit]))
 		})
 	})
 

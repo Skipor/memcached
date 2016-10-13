@@ -40,15 +40,13 @@ func LoadTest(addr string) {
 	defer runtime.GOMAXPROCS(prevMaxProcs)
 
 	const (
-		checkGotItems     = false
-		aproxCacheHit     = 0.92
-		cacheSize     int = 128 * (1 << 20)
-		itemsNum          = 16 * (1 << 10)
-		meanItemSize      = cacheSize * (aproxCacheHit * 100) / 100 / itemsNum
+		checkGotItems = false
+		itemsNum      = 16 * (1 << 10)
+		meanItemSize  = 16 * (1 << 10)
 		//meanExptime   = 20
-		stddev = itemsNum / 3
-		setP   = 0.01
-		delP   = 0.01
+		indexStddev = itemsNum / 2 // Index normal distribution parameter.
+		setP        = 0.1
+		delP        = 0.00
 
 		clientsNum    = 10
 		totalRequests = 16 * itemsNum
@@ -65,13 +63,13 @@ func LoadTest(addr string) {
 		By("Warmup cache.")
 		c := memcache.New(addr)
 		// Prepare items, warmup cache.
-		for i := 0; i < itemsNum; i++ {
+		for i := itemsNum - 1; i >= 0; i-- {
 			it := NewItem(testutil.Rand.Intn(2 * meanItemSize))
 			items[i] = it
 			err := c.Set(it)
 			if err != nil {
 				for IsTemporary(err) {
-					testutil.Byf("Conn %v temporary err: %v", i, err)
+					testutil.Byf("Warmup set item %v temporary err: %v", i, err)
 					time.Sleep(100 * time.Millisecond)
 					err = c.Set(it)
 				}
@@ -83,10 +81,18 @@ func LoadTest(addr string) {
 
 	var requests int32
 	Next := func() bool { return atomic.AddInt32(&requests, 1) < totalRequests }
+	// ItemIndex returns random  normally distributed index.
 	ItemIndex := func(r *rand.Rand) (index int) {
 		index = itemsNum
+		var try int
+		const maxTry = 5
+
 		for index >= itemsNum {
-			index = int(math.Abs(r.NormFloat64() * stddev))
+			index = int(math.Abs(r.NormFloat64() * indexStddev))
+			try++
+			if try > maxTry {
+				Fail("Item index too many tries. Make stddev smaller, it should help.")
+			}
 		}
 		return
 	}
@@ -99,8 +105,7 @@ func LoadTest(addr string) {
 	timeoutCounter := metrics.NewRegisteredCounter("err.timeout", registry)
 	temporaryCounter := metrics.NewRegisteredCounter("err.temporary", registry)
 
-	// From 1, so conn number in server log equals client i.
-	for i := 1; i <= clientsNum; i++ {
+	for i := 0; i < clientsNum; i++ {
 		client := i
 		source := rand.NewSource(testutil.Rand.Int63())
 		Rand := rand.New(source)
@@ -178,13 +183,14 @@ func LoadTest(addr string) {
 			}
 			break
 		}
+		By("Test stats. Time units is nanos.")
 		metrics.WriteOnce(registry, GinkgoWriter)
-		fmt.Fprintf(GinkgoWriter, "%v%% cache miss.\n",
-			missCounter.Count()*100/(getTimer.Count()+delTimer.Count()))
-		fmt.Fprintf(GinkgoWriter, "%v%% deletes.\n",
-			delTimer.Count()*100/totalRequests)
-		fmt.Fprintf(GinkgoWriter, "%v%% set.\n",
-			setTimer.Count()*100/totalRequests)
+		fmt.Fprintf(GinkgoWriter, "%.2f%% cache miss.\n",
+			float64(missCounter.Count()*100)/float64(getTimer.Count()+delTimer.Count()))
+		fmt.Fprintf(GinkgoWriter, "%.2f%% deletes.\n",
+			float64(delTimer.Count()*100)/totalRequests)
+		fmt.Fprintf(GinkgoWriter, "%.2f%% set.\n",
+			float64(setTimer.Count()*100)/totalRequests)
 	}()
 	finish.Wait()
 	By("finish done")

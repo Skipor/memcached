@@ -253,7 +253,10 @@ var _ = Describe("Conn", func() {
 					Bytes:   Rand.Intn(connMeta.MaxItemSize),
 				}
 				data, _ := connMeta.Pool.ReadData(FastRand, meta.Bytes)
-				items = append(items, &cache.Item{meta, data})
+				items = append(items, &cache.Item{
+					ItemMeta: meta,
+					Data:     data,
+				})
 			}
 			mcache.On("Get", mock.Anything).Return(func(actualKeys ...[]byte) (views []cache.ItemView) {
 				for i, k := range keys {

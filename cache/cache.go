@@ -155,25 +155,27 @@ func (c *cache) fixOverflows() {
 	now := time.Now().Unix()
 	if c.hotOverflow() {
 		c.log.Debug("Hot overflow.")
-		c.hot().shrink(c.limits.hot, now)
+		c.hot().shrinkWhile(c.hotOverflow, now)
 	}
 	if !c.totalOverflow() {
 		return
 	}
 	c.log.Debug("Total overflow.")
-	c.cold().shrink(c.coldLimit(), now)
+	c.cold().shrinkWhile(func() bool {
+		return !c.cold().empty() && c.totalOverflow()
+	}, now)
 
 	if c.warmOverflow() {
 		// Some active cold become warm now.
 		c.log.Debug("Warm overflow.")
-		c.warm().shrink(c.limits.warm, now)
+		c.warm().shrinkWhile(c.warmOverflow, now)
 	}
 
 	if !c.totalOverflow() {
 		return
 	}
 	c.log.Debug("Total overflow not fixed yet. Evict previous warm inactive items.")
-	c.cold().shrink(c.coldLimit(), now)
+	c.cold().shrinkWhile(c.totalOverflow, now)
 
 	if c.totalOverflow() {
 		panic("Overflow after cache eviction. Should not happen.")
@@ -203,11 +205,11 @@ func (c *cache) deleteDetached(n *node) {
 	}
 }
 
-func (c *cache) hot() *lru           { return c.lrus[hot] }
-func (c *cache) warm() *lru          { return c.lrus[warm] }
-func (c *cache) cold() *lru          { return c.lrus[cold] }
-func (c *cache) free() int64         { return c.limits.total - c.size() }
-func (c *cache) coldLimit() int64    { return c.cold().size + c.free() }
+func (c *cache) hot() *lru   { return c.lrus[hot] }
+func (c *cache) warm() *lru  { return c.lrus[warm] }
+func (c *cache) cold() *lru  { return c.lrus[cold] }
+func (c *cache) free() int64 { return c.limits.total - c.size() }
+
 func (c *cache) hotOverflow() bool   { return c.hot().size > c.limits.hot }
 func (c *cache) warmOverflow() bool  { return c.warm().size > c.limits.warm }
 func (c *cache) totalOverflow() bool { return c.free() < 0 }

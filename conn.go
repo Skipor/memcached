@@ -70,7 +70,7 @@ func (c *conn) loop() error {
 			case DeleteCommand:
 				clientErr, err = c.delete(fields)
 			default:
-				c.log.Error("Unexpected command: %s", command)
+				c.log.Error("Unexpected command: ", command)
 				err = c.sendResponse(ErrorResponse)
 			}
 		}
