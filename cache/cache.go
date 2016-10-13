@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"bytes"
+	"fmt"
 	"sync"
 	"time"
 
@@ -60,21 +62,6 @@ func newCache(l log.Logger, conf Config) *cache {
 	c.cold().onInactive = c.onEvict
 	return c
 }
-
-// Note: Doc based on ginhub.com/memcached/memcached/doc/new_lru.txt
-// * There are HOT, WARM, and COLD LRU's. New items enter the
-// HOT LRU.
-// * LRU updates only happen as items reach the bottom of an LRU. If active in
-// HOT, stay in HOT, if active in WARM, stay in WARM. If active in COLD, move
-// to WARM.
-// * HOT/WARM each capped at 32% of memory available for that slab class. COLD
-// is uncapped (by default, as of this writing).
-// * Items flow from HOT/WARM into COLD.
-//
-// The primary goal is to better protect active items from "scanning". Items
-// which are never hit again will flow from HOT, through COLD, and out the
-// bottom. Items occasionally active (reaching COLD, but being hit before
-// eviction), move to WARM. There they can stay relatively protected.
 
 type cache struct {
 	sync.RWMutex
@@ -137,8 +124,7 @@ func (c *cache) Set(i Item) {
 func (c *cache) Get(keys ...[]byte) (views []ItemView) {
 	c.RLock()
 	defer c.RUnlock()
-	defer c.checkInvariants()
-	c.log.Debug("get %v", keys)
+	c.log.Debugf("get %s", keysPrinter{keys})
 	now := time.Now().Unix()
 	for _, key := range keys {
 		if n, ok := c.table[string(key)]; ok { // No allocation.
@@ -238,13 +224,14 @@ func (c *cache) size() int64 {
 	return size
 }
 
-// Snapshot requires write lock be acquired.
-func (c *cache) snapshot() *cacheSnapshot {
-	// TODO after main logic
-	panic("NIY")
-}
+type keysPrinter struct{ keys [][]byte }
 
-type cacheSnapshot struct {
+func (p keysPrinter) String() string {
+	buf := &bytes.Buffer{}
+	for _, k := range p.keys {
+		buf.WriteString(fmt.Sprintf(" %q", k))
+	}
+	return buf.String()
 }
 
 type nopUnlocker struct{}

@@ -29,14 +29,14 @@ func newConn(l log.Logger, m *ConnMeta, rwc io.ReadWriteCloser) *conn {
 }
 
 func (c *conn) serve() {
-	c.log.Debug("Serve connection.")
+	c.log.Info("Serve connection.")
 	defer func() {
 		if r := recover(); r != nil {
 			c.serverError(stackerr.Newf("Panic: %s", r))
 			panic(c)
 		}
 		c.Close()
-		c.log.Debug("Connection closed.")
+		c.log.Info("Connection closed.")
 	}()
 
 	err := c.loop()

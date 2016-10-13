@@ -1,8 +1,10 @@
 package memcached
 
 import (
+	"errors"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/skipor/memcached/cache"
@@ -11,23 +13,36 @@ import (
 	"github.com/skipor/memcached/recycle"
 )
 
+const (
+	active int32 = iota
+	stoped
+)
+const DefaultAddr = ":11211"
+
+var ErrStoped = errors.New("memcached server have been stoped")
+
+// Server serves memcached text protocol over tcp.
+// Only Cache field is required, other have reasonable defaults.
 type Server struct {
-	Addr string
 	ConnMeta
+	Addr        string
 	Log         log.Logger
 	connCounter int64
+
+	stopState int32 // Atomic.
+	listner   net.Listener
 }
 
 // ConnMeta is data shared between connections.
 type ConnMeta struct {
-	Cache       cache.Cache
+	Cache       cache.Cache // Required.
 	Pool        *recycle.Pool
 	MaxItemSize int
 }
 
 func (s *Server) ListenAndServe() error {
 	if s.Addr == "" {
-		s.Addr = ":11211"
+		s.Addr = DefaultAddr
 	}
 	ln, err := net.Listen("tcp", s.Addr)
 	if err != nil {
@@ -37,11 +52,16 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Serve(l net.Listener) error {
+	s.listner = l
 	s.init()
 	var tempDelay time.Duration // How long to sleep on accept failure.
 	for {
 		c, err := l.Accept()
 		if err != nil {
+			if s.isStoped() {
+				s.Log.Info("Server was stopped. Accept return: ", err)
+				return ErrStoped
+			}
 			if ne, ok := err.(net.Error); !(ok && ne.Temporary()) {
 				return err
 			}
@@ -62,6 +82,16 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
+func (s *Server) Stop() {
+	s.Log.Info("Stopping server.")
+	atomic.StoreInt32(&s.stopState, stoped)
+	s.listner.Close()
+}
+
+func (s *Server) isStoped() bool {
+	return atomic.LoadInt32(&s.stopState) == stoped
+}
+
 func (s *Server) newConn(c net.Conn) *conn {
 	conn := newConn(s.Log.WithFields(log.Fields{"conn": s.connCounter}), &s.ConnMeta, c)
 	s.connCounter++
@@ -73,6 +103,10 @@ func (s *Server) init() {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
 	}
 	s.ConnMeta.init()
+	if s.Cache == nil {
+		s.Log.Panic("No cache provided.")
+	}
+
 	maxChunkSize := s.Pool.MaxChunkSize()
 	if maxChunkSize < InBufferSize || maxChunkSize < OutBufferSize {
 		s.Log.Panic("Too small max chunk size. It should be larger than buffers size, for zero copy send of large items.")
