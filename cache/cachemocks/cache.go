@@ -46,4 +46,9 @@ func (_m *Cache) Set(i cache.Item) {
 	_m.Called(i)
 }
 
+func (c *Cache) NewGetter(rawCommand []byte) cache.Getter   { return c }
+func (c *Cache) NewSetter(rawCommand []byte) cache.Setter   { return c }
+func (c *Cache) NewDeleter(rawCommand []byte) cache.Deleter { return c }
+
 var _ cache.Cache = (*Cache)(nil)
+var _ cache.View = (*Cache)(nil)

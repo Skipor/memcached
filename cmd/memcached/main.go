@@ -71,20 +71,20 @@ func main() {
 	l := log.NewLogger(conf.LogLevel, conf.LogDestination)
 	c := cache.NewCache(l, cache.Config{Size: conf.CacheSize})
 	s := &memcached.Server{
-		Addr: conf.Addr,
-		Log:  l,
+		Addr:         conf.Addr,
+		Log:          l,
+		NewCacheView: func() cache.View { return c },
 		ConnMeta: memcached.ConnMeta{
-			Cache:       c,
 			Pool:        recycle.NewPool(),
 			MaxItemSize: int(conf.MaxItemSize),
 		},
 	}
 	l.Debugf("Config: %#v", conf)
 	if tag.Debug {
-		l.Warn("Using debug build. It has more runtime checks and large peromance overhead.")
+		l.Warn("Using debug build. It has more runtime checks and large perfomance overhead.")
 	}
 
-	l.Info("Serve on ", s.Addr)
+	l.Info("Serve on %s.", s.Addr)
 	err := s.ListenAndServe()
 	l.Fatal("Serve error: ", err)
 }

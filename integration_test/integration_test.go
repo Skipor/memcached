@@ -35,7 +35,8 @@ var _ = Describe("Integration", func() {
 			Addr: addr,
 			Log:  l,
 		}
-		s.Cache = cache.NewCache(l, cache.Config{Size: cacheSize})
+		localCache := cache.NewCache(l, cache.Config{Size: cacheSize})
+		s.NewCacheView = func() cache.View { return localCache }
 		go func() {
 			err := s.ListenAndServe()
 			Expect(err).To(BeIdenticalTo(memcached.ErrStoped))

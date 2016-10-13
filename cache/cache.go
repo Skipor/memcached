@@ -10,13 +10,15 @@ import (
 	"github.com/skipor/memcached/log"
 )
 
-type Temp uint8
+type temp uint8
 
 const (
-	cold Temp = iota
+	cold temp = iota
 	warm
 	hot
-	temps   = 3
+
+	temps = 3
+
 	hotCap  = 0.32
 	warmCap = 0.32
 )
@@ -34,7 +36,10 @@ type Config struct {
 	Size int64
 }
 
-func NewCache(l log.Logger, conf Config) Cache {
+func NewCache(l log.Logger, conf Config) interface {
+	Cache
+	View
+} {
 	return newCache(l, conf)
 }
 
@@ -82,6 +87,10 @@ var _ Cache = (*cache)(nil)
 func (c *cache) Set(i Item) {
 	c.Lock()
 	defer c.Unlock()
+	c.set(i)
+}
+
+func (c *cache) set(i Item) {
 	defer c.checkInvariants()
 	now := nowUnix()
 	expired := i.expired(now)
@@ -110,12 +119,11 @@ func (c *cache) Set(i Item) {
 	}
 
 	if n.size() > c.limits.hot {
-		// TODO do this check earlier
 		c.log.Panic("Too large item. Size %v, limit %v", n.size(), c.limits.hot)
 	}
 
 	if c.hotOverflow() || c.totalOverflow() {
-		// TODO do this in backgroud goroutine. That improves latency.
+		// TODO do this in background goroutine. That improves latency.
 		c.fixOverflows()
 	}
 
@@ -124,6 +132,10 @@ func (c *cache) Set(i Item) {
 func (c *cache) Get(keys ...[]byte) (views []ItemView) {
 	c.RLock()
 	defer c.RUnlock()
+	return c.get(keys...)
+}
+
+func (c *cache) get(keys ...[]byte) (views []ItemView) {
 	c.log.Debugf("get %s", keysPrinter{keys})
 	now := time.Now().Unix()
 	for _, key := range keys {
@@ -140,6 +152,10 @@ func (c *cache) Get(keys ...[]byte) (views []ItemView) {
 func (c *cache) Delete(key []byte) (deleted bool) {
 	c.Lock()
 	defer c.Unlock()
+	return c.delete(key)
+}
+
+func (c *cache) delete(key []byte) (deleted bool) {
 	defer c.checkInvariants()
 	n, ok := c.table[string(key)] // No allocation.
 	if !ok {

@@ -15,16 +15,18 @@ type conn struct {
 	*bufio.Writer
 	closer io.Closer
 	*ConnMeta
-	log log.Logger
+	log   log.Logger
+	cache cache.View
 }
 
-func newConn(l log.Logger, m *ConnMeta, rwc io.ReadWriteCloser) *conn {
+func newConn(l log.Logger, m *ConnMeta, cache cache.View, rwc io.ReadWriteCloser) *conn {
 	return &conn{
 		reader:   newReader(rwc, m.Pool),
 		Writer:   bufio.NewWriterSize(rwc, OutBufferSize),
 		closer:   rwc,
 		ConnMeta: m,
 		log:      l,
+		cache:    cache,
 	}
 }
 
@@ -52,7 +54,7 @@ func (c *conn) Close() error {
 
 func (c *conn) loop() error {
 	for {
-		_, command, fields, clientErr, err := c.readCommand()
+		raw, command, fields, clientErr, err := c.readCommand()
 		if err != nil {
 			if err == io.EOF {
 				// Just client disconnect. Ok.
@@ -64,11 +66,14 @@ func (c *conn) loop() error {
 			c.log.Debugf("Command: %s.", command)
 			switch string(command) { // No allocation.
 			case GetCommand, GetsCommand:
-				clientErr, err = c.get(fields)
+				getter := c.cache.NewGetter(raw)
+				clientErr, err = c.get(getter, fields)
 			case SetCommand:
-				clientErr, err = c.set(fields)
+				setter := c.cache.NewSetter(raw)
+				clientErr, err = c.set(setter, fields)
 			case DeleteCommand:
-				clientErr, err = c.delete(fields)
+				deleter := c.cache.NewDeleter(raw)
+				clientErr, err = c.delete(deleter, fields)
 			default:
 				c.log.Error("Unexpected command: ", command)
 				err = c.sendResponse(ErrorResponse)
@@ -83,7 +88,7 @@ func (c *conn) loop() error {
 	}
 }
 
-func (c *conn) get(fields [][]byte) (clientErr, err error) {
+func (c *conn) get(getter cache.Getter, fields [][]byte) (clientErr, err error) {
 	if len(fields) == 0 {
 		clientErr = stackerr.Wrap(ErrMoreFieldsRequired)
 		return
@@ -95,7 +100,7 @@ func (c *conn) get(fields [][]byte) (clientErr, err error) {
 		}
 	}
 
-	views := c.Cache.Get(fields...)
+	views := getter.Get(fields...)
 
 	err = c.sendGetResponse(views)
 	return
@@ -127,7 +132,7 @@ func (c *conn) sendGetResponse(views []cache.ItemView) error {
 	return c.sendResponse(EndResponse)
 }
 
-func (c *conn) set(fields [][]byte) (clientErr, err error) {
+func (c *conn) set(setter cache.Setter, fields [][]byte) (clientErr, err error) {
 	var i cache.Item
 	var noreply bool
 	i.ItemMeta, noreply, clientErr = parseSetFields(fields)
@@ -148,7 +153,7 @@ func (c *conn) set(fields [][]byte) (clientErr, err error) {
 		return
 	}
 
-	c.Cache.Set(i)
+	setter.Set(i)
 
 	if noreply {
 		err = c.Flush()
@@ -158,7 +163,7 @@ func (c *conn) set(fields [][]byte) (clientErr, err error) {
 	return
 }
 
-func (c *conn) delete(fields [][]byte) (clientErr, err error) {
+func (c *conn) delete(deleter cache.Deleter, fields [][]byte) (clientErr, err error) {
 	const extraRequired = 0
 	var key []byte
 	var noreply bool
@@ -168,7 +173,7 @@ func (c *conn) delete(fields [][]byte) (clientErr, err error) {
 	}
 	c.log.Debugf("delete %s; noreply: %v", key, noreply)
 
-	deleted := c.Cache.Delete(key)
+	deleted := deleter.Delete(key)
 
 	if noreply {
 		err = c.Flush()

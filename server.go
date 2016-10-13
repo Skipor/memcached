@@ -25,17 +25,17 @@ var ErrStoped = errors.New("memcached server have been stoped")
 // Only Cache field is required, other have reasonable defaults.
 type Server struct {
 	ConnMeta
-	Addr        string
-	Log         log.Logger
-	connCounter int64
+	Addr         string
+	Log          log.Logger
+	NewCacheView func() cache.View
+	connCounter  int64
 
 	stopState int32 // Atomic.
-	listner   net.Listener
+	listener  net.Listener
 }
 
 // ConnMeta is data shared between connections.
 type ConnMeta struct {
-	Cache       cache.Cache // Required.
 	Pool        *recycle.Pool
 	MaxItemSize int
 }
@@ -52,7 +52,7 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Serve(l net.Listener) error {
-	s.listner = l
+	s.listener = l
 	s.init()
 	var tempDelay time.Duration // How long to sleep on accept failure.
 	for {
@@ -85,7 +85,7 @@ func (s *Server) Serve(l net.Listener) error {
 func (s *Server) Stop() {
 	s.Log.Info("Stopping server.")
 	atomic.StoreInt32(&s.stopState, stoped)
-	s.listner.Close()
+	s.listener.Close()
 }
 
 func (s *Server) isStoped() bool {
@@ -93,7 +93,12 @@ func (s *Server) isStoped() bool {
 }
 
 func (s *Server) newConn(c net.Conn) *conn {
-	conn := newConn(s.Log.WithFields(log.Fields{"conn": s.connCounter}), &s.ConnMeta, c)
+	conn := newConn(
+		s.Log.WithFields(log.Fields{"conn": s.connCounter}),
+		&s.ConnMeta,
+		s.NewCacheView(),
+		c,
+	)
 	s.connCounter++
 	return conn
 }
@@ -103,8 +108,8 @@ func (s *Server) init() {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
 	}
 	s.ConnMeta.init()
-	if s.Cache == nil {
-		s.Log.Panic("No cache provided.")
+	if s.NewCacheView == nil {
+		s.Log.Panic("No cache fabric provided.")
 	}
 
 	maxChunkSize := s.Pool.MaxChunkSize()

@@ -41,7 +41,7 @@ func RandSizeItem() *memcache.Item {
 
 func TestIntegrationTest(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "IntegrationTest Suite")
+	RunSpecs(t, "Integration Suite")
 }
 
 func ExpectItemsEqualWithOffset(off int, a, b *memcache.Item) {

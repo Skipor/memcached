@@ -75,16 +75,14 @@ var _ = Describe("Conn", func() {
 		mcache = &cachemocks.Cache{}
 		var connReader *io.PipeReader
 		connReader, in = io.Pipe()
-		connMeta = &ConnMeta{
-			Cache: mcache,
-		}
+		connMeta = &ConnMeta{}
 		connMeta.init()
 		rwc := struct {
 			io.ReadCloser
 			io.Writer
 		}{connReader, out.buf}
 		l := log.NewLogger(log.DebugLevel, GinkgoWriter)
-		c = newConn(l, connMeta, rwc)
+		c = newConn(l, connMeta, mcache, rwc)
 		go func() {
 			defer GinkgoRecover()
 			c.serve()
