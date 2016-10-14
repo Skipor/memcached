@@ -18,11 +18,6 @@ const MinSyncPeriod = 100 * time.Millisecond
 const MinRotateCompress = 0.7
 const Perm = 0664 // TODO make configurable.
 
-type file interface {
-	io.WriteCloser
-	Sync() error
-}
-
 type Config struct {
 	Name       string
 	SyncPeriod time.Duration
@@ -48,6 +43,9 @@ type AOF struct {
 }
 
 func Open(log log.Logger, r Rotator, conf Config) (aof *AOF, err error) {
+	if r == nil {
+		panic("nil rotator")
+	}
 	aof = &AOF{
 		log:     log,
 		rotator: r,
@@ -65,7 +63,7 @@ func Open(log log.Logger, r Rotator, conf Config) (aof *AOF, err error) {
 
 func (f *AOF) init() (err error) {
 	var file *os.File
-	file, err = os.OpenFile(f.config.Name, os.O_WRONLY|os.O_APPEND, Perm|os.ModeAppend)
+	file, err = os.OpenFile(f.config.Name, os.O_WRONLY|os.O_APPEND|os.O_CREATE, Perm|os.ModeAppend)
 	if err != nil {
 		return stackerr.Wrap(err)
 	}
