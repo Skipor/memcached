@@ -121,10 +121,11 @@ func (f *AOF) NewTransaction() io.WriteCloser {
 // rotate start background rotation of file snapshot into new file.
 // While rotation in process, all appended data is buffering in memory.
 // When rotation complete, all buffered data is appended to new file and
-// old file is atomically substituted with new.
+// old file is atomically replace with new.
 // rotate should be called without acquired lock.
 func (f *AOF) startRotate() {
 	go func() {
+		// Prepare.
 		assertNoErr := func(err error) {
 			if err != nil {
 				f.log.Panicf("AOF roatation error: %v", err)
@@ -139,17 +140,22 @@ func (f *AOF) startRotate() {
 		// Buffer for extra data appended after rotation start.
 		extra := &bytes.Buffer{}
 
+		// Take file snapshot.
 		f.Lock()
 		if f.rotateInProcess == false {
 			f.log.Panic("AOF rotation in process, but flag is not set.")
 		}
+		// We should to flush data for reader.
+		err = f.flusher.Flush()
+		assertNoErr(err)
 		oldWriter := f.writer
 		f.writer = io.MultiWriter(oldWriter, extra)
 		size := f.size
 		f.Unlock()
 
-		afterFileSnapshotRotationTestHook()
+		afterFileSnapshotTestHook()
 
+		// Rotate file snapshot.
 		f.log.Debug("AOF snapshot rotation started.")
 		err = RotateFile(f.rotator, f.config.Name, size, newFile)
 		assertNoErr(err)
@@ -163,18 +169,21 @@ func (f *AOF) startRotate() {
 		// Meanwhile extra can grow large. Writing it in background decreases lock time.
 		newExtra := &bytes.Buffer{}
 
+		// Take extra written.
 		f.Lock()
 		f.writer = io.MultiWriter(oldWriter, newExtra)
 		f.Unlock()
 
+		// Write extra.
 		_, err = extra.WriteTo(newFile)
 		assertNoErr(err)
 		err = newFile.Sync() // Do without lock as much work, as we can.
 		assertNoErr(err)
 		newFileName := newFile.Name()
 
-		afterExtraWriteRotationTestHook()
+		afterExtraWriteTestHook()
 
+		// Write newExtra, replace old with new.
 		f.Lock()
 		_, err = newExtra.WriteTo(newFile)
 		assertNoErr(err)
@@ -192,14 +201,14 @@ func (f *AOF) startRotate() {
 		f.Unlock()
 		f.log.Info("AOF rotation finished.")
 
-		afterFinishTakeRotationTestHook()
+		afterFinishTestHook()
 	}()
 }
 
 var (
-	afterFileSnapshotRotationTestHook = func() {}
-	afterExtraWriteRotationTestHook   = func() {}
-	afterFinishTakeRotationTestHook   = func() {}
+	afterFileSnapshotTestHook = func() {}
+	afterExtraWriteTestHook   = func() {}
+	afterFinishTestHook       = func() {}
 )
 
 func (f *AOF) startSync() {

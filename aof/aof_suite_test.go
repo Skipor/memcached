@@ -27,9 +27,9 @@ func testFileName() string {
 }
 
 func resetTestHooks() {
-	afterFileSnapshotRotationTestHook = func() {}
-	afterExtraWriteRotationTestHook = func() {}
-	afterFinishTakeRotationTestHook = func() {}
+	afterFileSnapshotTestHook = func() {}
+	afterExtraWriteTestHook = func() {}
+	afterFinishTestHook = func() {}
 }
 
 var panicRotator = RotatorFunc(func(r ROFile, w io.Writer) error {
