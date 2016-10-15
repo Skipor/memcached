@@ -23,7 +23,7 @@ type SnapshotReader interface {
 // Read reads cache snapshot and make cache from it.
 // r as io.ByteReader required, because gob.Decoder will wrap io.Reader into bufio.Reader,
 // what will cause extra data read that will remain in bufio.Reader.
-func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) (c *cache, err error) {
+func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) (c *LRU, err error) {
 	decoder := gob.NewDecoder(r)
 	var info snapshotInfo
 	err = decoder.Decode(&info)
@@ -36,7 +36,7 @@ func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) 
 	c.table = make(map[string]*node, sizes[hot]+sizes[warm]+sizes[cold])
 	now := nowUnix()
 	discard := newDiscard()
-	for li, lru := range c.lrus {
+	for li, queue := range c.queues {
 		for i := 0; i < sizes[li]; i++ {
 			var meta nodeMeta // Should be zeroed before every decode.
 			err = decoder.Decode(&meta)
@@ -59,7 +59,7 @@ func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) 
 			}
 
 			n := newNode(Item{meta.ItemMeta, data})
-			lru.push(n)
+			queue.push(n)
 			if meta.Active {
 				n.active = active
 			}
@@ -75,29 +75,29 @@ func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) 
 }
 
 // Snapshot returns made snapshot. Method requires read lock be acquired.
-func (c *cache) Snapshot() *Snapshot {
-	lrus := make([]lruSnapshot, temps)
+func (c *LRU) Snapshot() *Snapshot {
+	queues := make([]queueSnapshot, temps)
 	wg := sync.WaitGroup{}
 	wg.Add(temps)
 	// Cache can contain millions of nodes. So it is better to make snapshot parallel.
 	for cycleIndex := 0; cycleIndex < temps; cycleIndex++ {
 		go func(i int) {
-			lru := c.lrus[i]
-			s := lru.snapshot()
-			lrus[i] = s
+			queue := c.queues[i]
+			s := queue.snapshot()
+			queues[i] = s
 			wg.Done()
 		}(cycleIndex)
 	}
 	wg.Wait()
-	return &Snapshot{lrus}
+	return &Snapshot{queues}
 }
 
 // Snapshot hold cache LRUs state for serialization.
-// lruSnapshot is serialized as gob encoded snapshotInfo and sequence of lruSnapshots
+// queueSnapshot is serialized as gob encoded snapshotInfo and sequence of queueSnapshots
 // Note: until snapshot write it hold item data readers,
 // what prevent data recycle. If snapshot will not be written, all data leak.
 type Snapshot struct {
-	lrus []lruSnapshot
+	queues []queueSnapshot
 }
 
 var _ io.WriterTo = (*Snapshot)(nil)
@@ -109,7 +109,7 @@ type snapshotInfo struct {
 }
 
 func (s *Snapshot) WriteTo(w io.Writer) (nn int64, err error) {
-	if s.lrus == nil {
+	if s.queues == nil {
 		panic("snapshot has been writen already or isn't initialized")
 	}
 	oldWriter := w
@@ -125,8 +125,8 @@ func (s *Snapshot) WriteTo(w io.Writer) (nn int64, err error) {
 		err = stackerr.Wrap(err)
 		return
 	}
-	for _, lru := range s.lrus {
-		for _, n := range lru.nodes {
+	for _, q := range s.queues {
+		for _, n := range q.nodes {
 			err = encoder.Encode(n.meta)
 			if err != nil {
 				err = stackerr.Wrap(err)
@@ -140,19 +140,19 @@ func (s *Snapshot) WriteTo(w io.Writer) (nn int64, err error) {
 			n.reader.Close()
 		}
 	}
-	s.lrus = nil
+	s.queues = nil
 	return
 }
 
 func (s *Snapshot) info() (info snapshotInfo) {
-	for i, lru := range s.lrus {
-		info.Sizes[i] = len(lru.nodes)
+	for i, queue := range s.queues {
+		info.Sizes[i] = len(queue.nodes)
 	}
 	return
 }
 
-// lruSnapshot is serialized as sequence of nodeSnapshots.
-type lruSnapshot struct {
+// queueSnapshot is serialized as sequence of nodeSnapshots.
+type queueSnapshot struct {
 	nodes []nodeSnapshot
 }
 
@@ -167,13 +167,13 @@ type nodeMeta struct {
 	ItemMeta
 }
 
-func (l *lru) snapshot() lruSnapshot {
-	approxNodesNum := 2 * l.size / extraSizePerNode // Decrease allocations number for resize.
+func (q *queue) snapshot() queueSnapshot {
+	approxNodesNum := 2 * q.size / extraSizePerNode // Decrease allocations number for resize.
 	nodes := make([]nodeSnapshot, 0, approxNodesNum)
-	for n := l.head(); !l.end(n); n = n.next {
+	for n := q.head(); !q.end(n); n = n.next {
 		nodes = append(nodes, n.snapshot())
 	}
-	return lruSnapshot{nodes}
+	return queueSnapshot{nodes}
 }
 
 func (n *node) snapshot() nodeSnapshot {

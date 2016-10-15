@@ -20,15 +20,15 @@ func TestCache(t *testing.T) {
 	RunSpecs(t, "Cache Suite")
 }
 
-func ExpectCachesToBeEquvalent(a, b *cache) {
+func ExpectLRUsToBeEquvalent(a, b *LRU) {
 	a.ExpectInvariantsOk()
 	b.ExpectInvariantsOk()
-	for i, lru := range a.lrus {
-		ExpectLRUsToBeEqualent(lru, b.lrus[i])
+	for i, queue := range a.queues {
+		ExpectQueuesToBeEquvalent(queue, b.queues[i])
 	}
 }
 
-func ExpectLRUsToBeEqualent(a, b *lru) {
+func ExpectQueuesToBeEquvalent(a, b *queue) {
 	Expect(a.size).To(Equal(b.size))
 	na, nb := a.head(), b.head()
 	for ; !(a.end(na) || b.end(nb)); na, nb = na.next, nb.next {
@@ -49,24 +49,24 @@ func ExpectViewOfItem(view ItemView, it Item) {
 	ExpectBytesEqual(actualData, expectedData)
 }
 
-func (l *lru) ExpectInvariantsOk() {
-	Expect(l.fakeHead.prev).To(BeNil())
-	Expect(l.fakeTail.next).To(BeNil())
-	Expect(l.fakeHead.owner).To(BeNil())
-	Expect(l.fakeTail.owner).To(BeNil())
+func (q *queue) ExpectInvariantsOk() {
+	Expect(q.fakeHead.prev).To(BeNil())
+	Expect(q.fakeTail.next).To(BeNil())
+	Expect(q.fakeHead.owner).To(BeNil())
+	Expect(q.fakeTail.owner).To(BeNil())
 	var actualSize int64
-	for n := l.head(); !l.end(n); n = n.next {
+	for n := q.head(); !q.end(n); n = n.next {
 		actualSize += n.size()
 		Expect(n.prev.next).To(BeIdenticalTo(n))
-		Expect(n.owner).To(BeIdenticalTo(l))
+		Expect(n.owner).To(BeIdenticalTo(q))
 	}
-	Expect(l.tail().next).To(BeIdenticalTo(l.fakeTail))
-	Expect(actualSize).To(BeIdenticalTo(l.size))
+	Expect(q.tail().next).To(BeIdenticalTo(q.fakeTail))
+	Expect(actualSize).To(BeIdenticalTo(q.size))
 }
 
-func (c *cache) ExpectInvariantsOk() {
+func (c *LRU) ExpectInvariantsOk() {
 	var items int
-	for _, l := range c.lrus {
+	for _, l := range c.queues {
 		l.ExpectInvariantsOk()
 		for n := l.head(); !l.end(n); n = n.next {
 			items++
@@ -81,15 +81,15 @@ func (c *cache) ExpectInvariantsOk() {
 	ExpectWithOffset(1, c.warmOverflow()).To(BeFalse(), "warm overflow")
 }
 
-func (l *lru) nodes() (nodes []*node) {
-	for n := l.head(); !l.end(n); n = n.next {
+func (q *queue) nodes() (nodes []*node) {
+	for n := q.head(); !q.end(n); n = n.next {
 		nodes = append(nodes, n)
 	}
 	return
 }
 
-func (l *lru) items() (items []Item) {
-	for n := l.head(); !l.end(n); n = n.next {
+func (q *queue) items() (items []Item) {
+	for n := q.head(); !q.end(n); n = n.next {
 		items = append(items, n.Item)
 	}
 	return

@@ -25,8 +25,8 @@ type Deleter interface {
 	Delete(key []byte) (deleted bool)
 }
 
-func (c *cache) NewGetter(rawCommand []byte) Getter   { return c }
-func (c *cache) NewSetter(rawCommand []byte) Setter   { return c }
-func (c *cache) NewDeleter(rawCommand []byte) Deleter { return c }
+func (c *LRU) NewGetter(rawCommand []byte) Getter   { return c }
+func (c *LRU) NewSetter(rawCommand []byte) Setter   { return c }
+func (c *LRU) NewDeleter(rawCommand []byte) Deleter { return c }
 
-var _ View = (*cache)(nil)
+var _ View = (*LRU)(nil)

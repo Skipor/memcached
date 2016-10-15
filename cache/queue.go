@@ -13,25 +13,25 @@ const (
 )
 
 // Pre and post conditions (Invariants) for pushBack and shrink methods:
-// * lru owns nodes between fakeHead and fakeTail.
+// * queue owns nodes between fakeHead and fakeTail.
 // * {fakeHead, all owned nodes, fakeTail} are correct doubly linked list.
-// * all nodes owned by lru have field node.owner equal to &lru
-// * lru.size equal sum of owned nodes size()
+// * all nodes owned by queue have field node.owner equal to &queue
+// * queue.size equal sum of owned nodes size()
 // * there are no recycled data in nodes.
-type lru struct {
+type queue struct {
 	size int64
 	// callbacks called in shrink.
-	// Callback should save lru invariants: attach to same owner or disown node.
+	// Callback should save queue invariants: attach to same owner or disown node.
 	callbacks
 
 	// Fake nodes. Real nodes are between them.
 	// nil <- fakeHead <-> node_0 <-> ... <-> node_(n-1) <-> fakeTail -> nil
 	// Such structure prevent nil checks in code.
 
-	// fakeHead is bottom of lru. fakeHead.next is most lately added item.
+	// fakeHead is bottom of queue. fakeHead.next is most lately added item.
 	fakeHead *node
 
-	// fakeTail is top of lru. All new added before fakeTail.
+	// fakeTail is top of queue. All new added before fakeTail.
 	fakeTail *node
 }
 
@@ -45,8 +45,8 @@ type callbacks struct {
 const fakeHeadKey = " !HEAD! "
 const fakeTailKey = " !TAIL! "
 
-func newLRU() *lru {
-	l := &lru{}
+func newQueue() *queue {
+	l := &queue{}
 	l.fakeHead, l.fakeTail = &node{}, &node{}
 	l.fakeHead.Key = fakeHeadKey
 	l.fakeTail.Key = fakeTailKey
@@ -54,62 +54,62 @@ func newLRU() *lru {
 	return l
 }
 
-func (l *lru) push(n *node) {
-	n.owner = l
-	l.size += n.size()
+func (q *queue) push(n *node) {
+	n.owner = q
+	q.size += n.size()
 	attachAsInactive(n)
 }
 
 // shrink detach nodes from head to tail, and call callback chosen on node state
 // (expired, active, inactive). Nodes detached in shrink have invalid node.prev pointer.
 // node.next is valid during callback call.
-func (l *lru) shrink(toSize int64, now int64) {
+func (q *queue) shrink(toSize int64, now int64) {
 	if toSize < 0 {
 		panic(fmt.Sprintf("try shrink to negative size %v", toSize))
 	}
-	l.shrinkWhile(func() bool {
-		return toSize < l.size
+	q.shrinkWhile(func() bool {
+		return toSize < q.size
 	}, now)
 }
 
-func (l *lru) shrinkWhile(while func() bool, now int64) {
-	cur, next := l.head(), l.head().next
+func (q *queue) shrinkWhile(while func() bool, now int64) {
+	cur, next := q.head(), q.head().next
 	for ; while(); cur, next = next, next.next {
-		l.assertNotTail(cur)
+		q.assertNotTail(cur)
 		if tag.Debug {
 			cur.prev = nil
 		}
 		if cur.expired(now) {
-			l.onExpire(cur)
+			q.onExpire(cur)
 			continue
 		}
 		if cur.isActive() {
-			l.onActive(cur)
+			q.onActive(cur)
 			continue
 		}
-		l.onInactive(cur)
+		q.onInactive(cur)
 	}
-	link(l.fakeHead, cur)
+	link(q.fakeHead, cur)
 }
 
-func (l *lru) head() *node { return l.fakeHead.next }
-func (l *lru) tail() *node { return l.fakeTail.prev }
-func (l *lru) end(n *node) bool {
+func (q *queue) head() *node { return q.fakeHead.next }
+func (q *queue) tail() *node { return q.fakeTail.prev }
+func (q *queue) end(n *node) bool {
 	if tag.Debug {
-		if n.owner != l {
+		if n.owner != q {
 			panic("check end of not owned node")
 		}
 	}
-	return n == l.fakeTail
+	return n == q.fakeTail
 }
-func (l *lru) empty() bool { return l.size == 0 }
+func (q *queue) empty() bool { return q.size == 0 }
 
 type node struct {
 	Item
 	// active can have concurrent and atomic access with read lock acquired,
 	// or exclusive access with write lock acquired.
 	active int32
-	owner  *lru
+	owner  *queue
 	prev   *node
 	next   *node
 }
@@ -146,8 +146,8 @@ func (n *node) size() int64 {
 	return int64(extraSizePerNode + len(n.Key) + n.Bytes)
 }
 
-func (l *lru) assertNotTail(n *node) {
-	if n == l.fakeTail {
+func (q *queue) assertNotTail(n *node) {
+	if n == q.fakeTail {
 		panic("node pointer out of range")
 	}
 }
@@ -160,7 +160,7 @@ func attachAsInactive(n *node) {
 	link(n, n.owner.fakeTail)
 }
 
-func moveTo(other *lru) func(*node) {
+func moveTo(other *queue) func(*node) {
 	return func(n *node) {
 		n.disown()
 		other.push(n)

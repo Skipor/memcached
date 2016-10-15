@@ -2,5 +2,5 @@
 
 package cache
 
-func (l *lru) checkInvariants()   {}
-func (c *cache) checkInvariants() {}
+func (q *queue) checkInvariants() {}
+func (c *LRU) checkInvariants()   {}

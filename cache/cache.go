@@ -41,8 +41,8 @@ type Config struct {
 	Size int64
 }
 
-func NewCache(l log.Logger, conf Config) *cache {
-	c := &cache{
+func NewCache(l log.Logger, conf Config) *LRU {
+	c := &LRU{
 		log:   l,
 		table: make(map[string]*node),
 		limits: limits{
@@ -52,9 +52,9 @@ func NewCache(l log.Logger, conf Config) *cache {
 		},
 	}
 	for i := 0; i < temps; i++ {
-		lru := newLRU()
-		lru.onExpire = c.onExpire
-		c.lrus = append(c.lrus, lru)
+		queue := newQueue()
+		queue.onExpire = c.onExpire
+		c.queues = append(c.queues, queue)
 	}
 	c.hot().onActive = attachAsInactive
 	c.warm().onActive = attachAsInactive
@@ -66,10 +66,10 @@ func NewCache(l log.Logger, conf Config) *cache {
 	return c
 }
 
-type cache struct {
+type LRU struct {
 	sync.RWMutex
 	table  map[string]*node
-	lrus   []*lru
+	queues []*queue
 	limits limits
 	log    log.Logger
 }
@@ -80,15 +80,15 @@ type limits struct {
 	warm  int64
 }
 
-var _ Cache = (*cache)(nil)
+var _ Cache = (*LRU)(nil)
 
-func (c *cache) Set(i Item) {
+func (c *LRU) Set(i Item) {
 	c.Lock()
 	defer c.Unlock()
 	c.set(i)
 }
 
-func (c *cache) set(i Item) {
+func (c *LRU) set(i Item) {
 	defer c.checkInvariants()
 	now := nowUnix()
 	expired := i.expired(now)
@@ -111,7 +111,7 @@ func (c *cache) set(i Item) {
 	c.log.Debugf("Add item %s.", i.Key)
 	n = newNode(i)
 	c.table[i.Key] = n
-	c.lrus[hot].push(n)
+	c.queues[hot].push(n)
 	if wasActive {
 		n.active = active
 	}
@@ -127,13 +127,13 @@ func (c *cache) set(i Item) {
 
 }
 
-func (c *cache) Get(keys ...[]byte) (views []ItemView) {
+func (c *LRU) Get(keys ...[]byte) (views []ItemView) {
 	c.RLock()
 	defer c.RUnlock()
 	return c.get(keys...)
 }
 
-func (c *cache) get(keys ...[]byte) (views []ItemView) {
+func (c *LRU) get(keys ...[]byte) (views []ItemView) {
 	c.log.Debugf("get %s", keysPrinter{keys})
 	now := time.Now().Unix()
 	for _, key := range keys {
@@ -147,13 +147,13 @@ func (c *cache) get(keys ...[]byte) (views []ItemView) {
 	return
 }
 
-func (c *cache) Touch(keys ...[]byte) {
+func (c *LRU) Touch(keys ...[]byte) {
 	c.RLock()
 	defer c.RUnlock()
 	c.touch(keys...)
 }
 
-func (c *cache) touch(keys ...[]byte) {
+func (c *LRU) touch(keys ...[]byte) {
 	c.log.Debugf("touch %s", keysPrinter{keys})
 	for _, key := range keys {
 		if n, ok := c.table[string(key)]; ok { // No allocation.
@@ -163,13 +163,13 @@ func (c *cache) touch(keys ...[]byte) {
 	return
 }
 
-func (c *cache) Delete(key []byte) (deleted bool) {
+func (c *LRU) Delete(key []byte) (deleted bool) {
 	c.Lock()
 	defer c.Unlock()
 	return c.delete(key)
 }
 
-func (c *cache) delete(key []byte) (deleted bool) {
+func (c *LRU) delete(key []byte) (deleted bool) {
 	defer c.checkInvariants()
 	n, ok := c.table[string(key)] // No allocation.
 	if !ok {
@@ -180,7 +180,7 @@ func (c *cache) delete(key []byte) (deleted bool) {
 	return true
 }
 
-func (c *cache) fixOverflows() {
+func (c *LRU) fixOverflows() {
 	c.log.Debug("Fixing overflows")
 	now := time.Now().Unix()
 	if c.hotOverflow() {
@@ -212,18 +212,18 @@ func (c *cache) fixOverflows() {
 	}
 }
 
-func (c *cache) onEvict(n *node) {
+func (c *LRU) onEvict(n *node) {
 	c.log.Debugf("Item %s evicted.", n.Key)
 	c.deleteDetached(n)
 }
 
-func (c *cache) onExpire(n *node) {
+func (c *LRU) onExpire(n *node) {
 	c.log.Debugf("Item %s expired.", n.Key)
 	c.deleteDetached(n)
 }
 
 // delete removes owned but detached node.
-func (c *cache) deleteDetached(n *node) {
+func (c *LRU) deleteDetached(n *node) {
 	n.disown()
 	n.Data.Recycle()
 	delete(c.table, string(n.Key))
@@ -235,23 +235,23 @@ func (c *cache) deleteDetached(n *node) {
 	}
 }
 
-func (c *cache) hot() *lru   { return c.lrus[hot] }
-func (c *cache) warm() *lru  { return c.lrus[warm] }
-func (c *cache) cold() *lru  { return c.lrus[cold] }
-func (c *cache) free() int64 { return c.limits.total - c.size() }
+func (c *LRU) hot() *queue  { return c.queues[hot] }
+func (c *LRU) warm() *queue { return c.queues[warm] }
+func (c *LRU) cold() *queue { return c.queues[cold] }
+func (c *LRU) free() int64  { return c.limits.total - c.size() }
 
-func (c *cache) hotOverflow() bool   { return c.hot().size > c.limits.hot }
-func (c *cache) warmOverflow() bool  { return c.warm().size > c.limits.warm }
-func (c *cache) totalOverflow() bool { return c.free() < 0 }
+func (c *LRU) hotOverflow() bool   { return c.hot().size > c.limits.hot }
+func (c *LRU) warmOverflow() bool  { return c.warm().size > c.limits.warm }
+func (c *LRU) totalOverflow() bool { return c.free() < 0 }
 
-func (c *cache) itemsNum() int {
+func (c *LRU) itemsNum() int {
 	return len(c.table)
 }
 
-func (c *cache) size() int64 {
+func (c *LRU) size() int64 {
 	var size int64
-	for i := range c.lrus {
-		size += c.lrus[i].size
+	for i := range c.queues {
+		size += c.queues[i].size
 	}
 	return size
 }
@@ -265,13 +265,6 @@ func (p keysPrinter) String() string {
 	}
 	return buf.String()
 }
-
-type nopUnlocker struct{}
-
-var _ sync.Locker = nopUnlocker{}
-
-func (nopUnlocker) Lock()   { panic("should not be called") }
-func (nopUnlocker) Unlock() {}
 
 func nowUnix() int64 {
 	return time.Now().Unix()

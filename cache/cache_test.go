@@ -21,7 +21,7 @@ func testLimits(n int64) limits {
 var _ = Describe("Cache", func() {
 	var (
 		p            testPool
-		c            *cache
+		c            *LRU
 		hotWarmLimit int64
 		leak         chan *recycle.Data
 	)

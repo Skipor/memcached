@@ -11,11 +11,11 @@ const testNodeSize = 2 * extraSizePerNode
 
 var _ = Describe("LRU", func() {
 	var (
-		l *lru
+		l *queue
 	)
 	BeforeEach(func() {
 		resetTestKeys()
-		l = newLRU()
+		l = newQueue()
 	})
 	AfterEach(func() {
 		l.ExpectInvariantsOk()
@@ -76,7 +76,7 @@ var _ = Describe("LRU", func() {
 		})
 
 		It("move to other", func() {
-			otherLRU := newLRU()
+			otherLRU := newQueue()
 			l.onInactive = mc.MoveTo(otherLRU)
 			l.onActive = mc.AttachAsInactive
 

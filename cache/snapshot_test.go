@@ -15,8 +15,8 @@ var _ = Describe("Snapshot", func() {
 	var (
 		l            log.Logger
 		p            testPool
-		expected     *cache
-		actual       *cache
+		expected     *LRU
+		actual       *LRU
 		expectedConf Config
 		actualConf   Config
 		snapshot     *bytes.Buffer
@@ -49,7 +49,7 @@ var _ = Describe("Snapshot", func() {
 		It("actual equalent expected", func() {
 			DoRead()
 			Expect(err).To(BeNil())
-			ExpectCachesToBeEquvalent(actual, expected)
+			ExpectLRUsToBeEquvalent(actual, expected)
 		})
 	}
 
@@ -82,7 +82,7 @@ var _ = Describe("Snapshot", func() {
 		AssertEquvalent()
 	})
 
-	Context("with one lru", func() {
+	Context("with one queue", func() {
 		BeforeEach(func() {
 			for i := 0; i < Rand.Intn(10)+3; i++ {
 				it := p.randSizeItem()
@@ -107,7 +107,7 @@ var _ = Describe("Snapshot", func() {
 		AssertEquvalent()
 	})
 
-	Context("with many lrus", func() {
+	Context("with many queues", func() {
 		BeforeEach(func() {
 			for i := 0; expected.size() < expected.limits.total-testNodeSize; i++ {
 				it := p.randSizeItem()
@@ -147,7 +147,7 @@ var _ = Describe("Snapshot", func() {
 			Expect(err).To(BeNil())
 			Expect(actual.itemsNum()).To(Equal(expected.itemsNum() - 1))
 			expected.Delete([]byte(expiredKey))
-			ExpectCachesToBeEquvalent(actual, expected)
+			ExpectLRUsToBeEquvalent(actual, expected)
 		})
 	})
 
@@ -185,7 +185,7 @@ var _ = Describe("Snapshot", func() {
 			DoRead()
 			expected.limits = actual.limits
 			expected.fixOverflows()
-			ExpectCachesToBeEquvalent(actual, expected)
+			ExpectLRUsToBeEquvalent(actual, expected)
 		})
 	})
 

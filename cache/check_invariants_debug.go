@@ -22,24 +22,24 @@ func GomegaFailHandler(message string, callerSkip ...int) {
 	log.Fatal("FATAL: invariants are broken:", stackerr.WrapSkip(errors.New(message), skip))
 }
 
-func (l *lru) checkInvariants() {
-	Expect(l.fakeHead.prev).To(BeNil())
-	Expect(l.fakeTail.next).To(BeNil())
-	Expect(l.fakeHead.owner).To(BeNil())
-	Expect(l.fakeTail.owner).To(BeNil())
+func (q *queue) checkInvariants() {
+	Expect(q.fakeHead.prev).To(BeNil())
+	Expect(q.fakeTail.next).To(BeNil())
+	Expect(q.fakeHead.owner).To(BeNil())
+	Expect(q.fakeTail.owner).To(BeNil())
 	var actualSize int64
-	for n := l.head(); !l.end(n); n = n.next {
+	for n := q.head(); !q.end(n); n = n.next {
 		actualSize += n.size()
 		Expect(n.prev.next).To(BeIdenticalTo(n))
-		Expect(n.owner).To(BeIdenticalTo(l))
+		Expect(n.owner).To(BeIdenticalTo(q))
 	}
-	Expect(l.tail().next).To(BeIdenticalTo(l.fakeTail))
-	Expect(actualSize).To(BeIdenticalTo(l.size))
+	Expect(q.tail().next).To(BeIdenticalTo(q.fakeTail))
+	Expect(actualSize).To(BeIdenticalTo(q.size))
 }
 
-func (c *cache) checkInvariants() {
+func (c *LRU) checkInvariants() {
 	var items int
-	for _, l := range c.lrus {
+	for _, l := range c.queues {
 		l.checkInvariants()
 		for n := l.head(); !l.end(n); n = n.next {
 			items++

@@ -27,9 +27,9 @@ func (m *MockCallback) AttachAsInactive(n *node) {
 	m.Called(n)
 }
 
-func (m *MockCallback) MoveTo(l *lru) func(*node) {
+func (m *MockCallback) MoveTo(q *queue) func(*node) {
 	return func(n *node) {
-		moveTo(l)(n)
+		moveTo(q)(n)
 		m.Moved(n)
 	}
 }
