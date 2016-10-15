@@ -12,8 +12,8 @@ type Cache struct {
 }
 
 // Delete provides a mock function with given fields: key
-func (_m *Cache) Delete(key []byte) bool {
-	ret := _m.Called(key)
+func (c *Cache) Delete(key []byte) bool {
+	ret := c.Called(key)
 
 	var r0 bool
 	if rf, ok := ret.Get(0).(func([]byte) bool); ok {
@@ -26,8 +26,8 @@ func (_m *Cache) Delete(key []byte) bool {
 }
 
 // Get provides a mock function with given fields: key
-func (_m *Cache) Get(key ...[]byte) []cache.ItemView {
-	ret := _m.Called(key)
+func (c *Cache) Get(key ...[]byte) []cache.ItemView {
+	ret := c.Called(key)
 
 	var r0 []cache.ItemView
 	if rf, ok := ret.Get(0).(func(...[]byte) []cache.ItemView); ok {
@@ -41,19 +41,13 @@ func (_m *Cache) Get(key ...[]byte) []cache.ItemView {
 	return r0
 }
 
-// Touch provides a mock function with given fields: key
-func (_m *Cache) Touch(key ...[]byte) {
-	ret := _m.Called(key)
+func (c *Cache) Touch(key ...[]byte) { c.Called(key) }
+func (c *Cache) Set(i cache.Item)    { c.Called(i) }
 
-	if rf, ok := ret.Get(0).(func(...[]byte)); ok {
-		rf(key...)
-	}
-}
-
-// Set provides a mock function with given fields: i
-func (_m *Cache) Set(i cache.Item) {
-	_m.Called(i)
-}
+func (c *Cache) Lock()    { c.Called() }
+func (c *Cache) Unlock()  { c.Called() }
+func (c *Cache) RLock()   { c.Called() }
+func (c *Cache) RUnlock() { c.Called() }
 
 func (c *Cache) NewGetter(rawCommand []byte) cache.Getter   { return c }
 func (c *Cache) NewSetter(rawCommand []byte) cache.Setter   { return c }
@@ -61,3 +55,4 @@ func (c *Cache) NewDeleter(rawCommand []byte) cache.Deleter { return c }
 
 var _ cache.Cache = (*Cache)(nil)
 var _ cache.View = (*Cache)(nil)
+var _ cache.RWCache = (*Cache)(nil)

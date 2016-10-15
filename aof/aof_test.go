@@ -110,7 +110,7 @@ var _ = Describe("AOF init", func() {
 	BeforeEach(func() {
 		dataWriten = &bytes.Buffer{}
 		initialData = &bytes.Buffer{}
-		filename = testFileName()
+		filename = TmpFileName()
 		conf = Config{
 			Name:       filename,
 			RotateSize: rotateSize,
@@ -216,7 +216,7 @@ var _ = Describe("AOF rotation", func() {
 		}
 		expectedData := bytes.Join([][]byte{rotated, afterFileSnapshot, afterExtraWrite, afterFinish}, nil)
 
-		filename := testFileName()
+		filename := TmpFileName()
 		defer os.Remove(filename)
 		err := ioutil.WriteFile(filename, initial, Perm)
 		Expect(err).To(BeNil())

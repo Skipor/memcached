@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
+	"io/ioutil"
+	"os"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -37,4 +40,15 @@ func ExpectBytesEqualWithOffset(off int, a, b []byte) {
 			}
 		}
 	}
+}
+
+func TmpFileName() string {
+	f, err := ioutil.TempFile("", "go_test_tmp_")
+	Expect(err).To(BeNil())
+	filename := f.Name()
+	err = f.Close()
+	Expect(err).To(BeNil())
+	err = os.Remove(filename)
+	Expect(err).To(BeNil())
+	return filename
 }

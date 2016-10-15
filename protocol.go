@@ -91,6 +91,29 @@ func parseKey(p []byte) (key string, err error) {
 	return
 }
 
+func parseKeyFields(fields [][]byte, extraRequired int) (key []byte, extra [][]byte, noreply bool, err error) {
+	if len(fields) < 1+extraRequired {
+		err = stackerr.Wrap(ErrMoreFieldsRequired)
+		return
+	}
+	key = fields[0]
+	extra = fields[1:][:extraRequired]
+	options := fields[1:][extraRequired:]
+	const maxOptions = 1
+	if len(options) > maxOptions {
+		err = stackerr.Wrap(ErrTooManyFields)
+		return
+	}
+	if len(options) != 0 {
+		if string(options[0]) != NoReplyOption {
+			err = stackerr.Wrap(ErrInvalidOption)
+			return
+		}
+		noreply = true
+	}
+	return
+}
+
 func parseSetFields(fields [][]byte) (m cache.ItemMeta, noreply bool, err error) {
 	const extraRequired = 3
 	var key []byte
@@ -123,26 +146,24 @@ func parseSetFields(fields [][]byte) (m cache.ItemMeta, noreply bool, err error)
 	return
 }
 
-func parseKeyFields(fields [][]byte, extraRequired int) (key []byte, extra [][]byte, noreply bool, err error) {
-	if len(fields) < 1+extraRequired {
+func parseDeleteFields(fields [][]byte) (key []byte, noreply bool, err error) {
+	const extraRequired = 0
+	key, _, noreply, err = parseKeyFields(fields, extraRequired)
+	return
+}
+
+func parseGetFields(fields [][]byte) (keys [][]byte, err error) {
+	if len(fields) == 0 {
 		err = stackerr.Wrap(ErrMoreFieldsRequired)
 		return
 	}
-	key = fields[0]
-	extra = fields[1:][:extraRequired]
-	options := fields[1:][extraRequired:]
-	const maxOptions = 1
-	if len(options) > maxOptions {
-		err = stackerr.Wrap(ErrTooManyFields)
-		return
-	}
-	if len(options) != 0 {
-		if string(options[0]) != NoReplyOption {
-			err = stackerr.Wrap(ErrInvalidOption)
+	for _, key := range fields {
+		err = checkKey(key)
+		if err != nil {
 			return
 		}
-		noreply = true
 	}
+	keys = fields
 	return
 }
 

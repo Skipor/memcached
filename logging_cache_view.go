@@ -38,6 +38,13 @@ type LoggingCacheView struct {
 var _ cache.View = (*LoggingCacheView)(nil)
 
 func (v *LoggingCacheView) NewGetter(raw []byte) cache.Getter {
+	return &lcvOperation{
+		LoggingCacheView: v,
+		raw:              raw,
+	}
+}
+
+func (v *LoggingCacheView) NewSetter(raw []byte) cache.Setter {
 	if v.rawCopy == nil {
 		v.rawCopy = make([]byte, 0, len(raw))
 	}
@@ -46,16 +53,9 @@ func (v *LoggingCacheView) NewGetter(raw []byte) cache.Getter {
 		LoggingCacheView: v,
 		raw:              v.rawCopy,
 	}
-	copy(o.raw, raw)
 	return o
 }
 
-func (v *LoggingCacheView) NewSetter(raw []byte) cache.Setter {
-	return &lcvOperation{
-		LoggingCacheView: v,
-		raw:              raw,
-	}
-}
 func (v *LoggingCacheView) NewDeleter(raw []byte) cache.Deleter {
 	return &lcvOperation{
 		LoggingCacheView: v,
@@ -134,5 +134,4 @@ func (o *lcvOperation) Delete(key []byte) (deleted bool) {
 	o.raw = nil
 	o.LoggingCacheView = nil
 	return
-
 }

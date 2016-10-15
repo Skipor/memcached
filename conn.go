@@ -89,18 +89,12 @@ func (c *conn) loop() error {
 }
 
 func (c *conn) get(getter cache.Getter, fields [][]byte) (clientErr, err error) {
-	if len(fields) == 0 {
-		clientErr = stackerr.Wrap(ErrMoreFieldsRequired)
+	var keys [][]byte
+	keys, clientErr = parseGetFields(fields)
+	if clientErr != nil {
 		return
 	}
-	for _, key := range fields {
-		clientErr = checkKey(key)
-		if clientErr != nil {
-			return
-		}
-	}
-
-	views := getter.Get(fields...)
+	views := getter.Get(keys...)
 
 	err = c.sendGetResponse(views)
 	return
@@ -164,10 +158,9 @@ func (c *conn) set(setter cache.Setter, fields [][]byte) (clientErr, err error) 
 }
 
 func (c *conn) delete(deleter cache.Deleter, fields [][]byte) (clientErr, err error) {
-	const extraRequired = 0
 	var key []byte
 	var noreply bool
-	key, _, noreply, clientErr = parseKeyFields(fields, extraRequired)
+	key, noreply, clientErr = parseDeleteFields(fields)
 	if clientErr != nil {
 		return
 	}
