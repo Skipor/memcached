@@ -20,10 +20,10 @@ type SnapshotReader interface {
 	io.ByteReader
 }
 
-// Read reads cache snapshot and make cache from it.
+// readSnapshot reads cache snapshot and make cache from it.
 // r as io.ByteReader required, because gob.Decoder will wrap io.Reader into bufio.Reader,
 // what will cause extra data read that will remain in bufio.Reader.
-func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) (c *LRU, err error) {
+func readSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) (c *lru, err error) {
 	decoder := gob.NewDecoder(r)
 	var info snapshotInfo
 	err = decoder.Decode(&info)
@@ -32,7 +32,7 @@ func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) 
 		return
 	}
 	sizes := info.Sizes
-	c = NewCache(l, conf)
+	c = newLRU(l, conf)
 	c.table = make(map[string]*node, sizes[hot]+sizes[warm]+sizes[cold])
 	now := nowUnix()
 	discard := newDiscard()
@@ -75,7 +75,7 @@ func ReadSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) 
 }
 
 // Snapshot returns made snapshot. Method requires read lock be acquired.
-func (c *LRU) Snapshot() *Snapshot {
+func (c *lru) snapshot() *Snapshot {
 	queues := make([]queueSnapshot, temps)
 	wg := sync.WaitGroup{}
 	wg.Add(temps)

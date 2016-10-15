@@ -35,7 +35,7 @@ var _ = Describe("Integration", func() {
 			Addr: addr,
 			Log:  l,
 		}
-		localCache := cache.NewCache(l, cache.Config{Size: cacheSize})
+		localCache := cache.NewLRU(l, cache.Config{Size: cacheSize})
 		s.NewCacheView = func() cache.View { return localCache }
 		go func() {
 			err := s.ListenAndServe()

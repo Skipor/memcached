@@ -40,7 +40,7 @@ var _ = Describe("Cache", func() {
 		}
 	})
 	JustBeforeEach(func() {
-		c = NewCache(log.NewLogger(log.DebugLevel, GinkgoWriter), Config{})
+		c = NewLRU(log.NewLogger(log.DebugLevel, GinkgoWriter), Config{})
 		c.limits = testLimits(hotWarmLimit)
 		if leak != nil {
 			p.SetLeakCallback(recycle.NotifyOnLeak(leak))

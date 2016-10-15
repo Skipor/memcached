@@ -3,4 +3,4 @@
 package cache
 
 func (q *queue) checkInvariants() {}
-func (c *LRU) checkInvariants()   {}
+func (c *lru) checkInvariants()   {}

@@ -41,6 +41,15 @@ func (_m *Cache) Get(key ...[]byte) []cache.ItemView {
 	return r0
 }
 
+// Touch provides a mock function with given fields: key
+func (_m *Cache) Touch(key ...[]byte) {
+	ret := _m.Called(key)
+
+	if rf, ok := ret.Get(0).(func(...[]byte)); ok {
+		rf(key...)
+	}
+}
+
 // Set provides a mock function with given fields: i
 func (_m *Cache) Set(i cache.Item) {
 	_m.Called(i)

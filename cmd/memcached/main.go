@@ -69,7 +69,7 @@ func main() {
 	// TODO pprof monitoring on configurable port
 	conf := config()
 	l := log.NewLogger(conf.LogLevel, conf.LogDestination)
-	c := cache.NewCache(l, cache.Config{Size: conf.CacheSize})
+	c := cache.NewLRU(l, cache.Config{Size: conf.CacheSize})
 	s := &memcached.Server{
 		Addr:         conf.Addr,
 		Log:          l,

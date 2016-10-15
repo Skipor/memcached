@@ -20,7 +20,7 @@ func TestCache(t *testing.T) {
 	RunSpecs(t, "Cache Suite")
 }
 
-func ExpectLRUsToBeEquvalent(a, b *LRU) {
+func ExpectLRUsToBeEquvalent(a, b *lru) {
 	a.ExpectInvariantsOk()
 	b.ExpectInvariantsOk()
 	for i, queue := range a.queues {
@@ -64,7 +64,7 @@ func (q *queue) ExpectInvariantsOk() {
 	Expect(actualSize).To(BeIdenticalTo(q.size))
 }
 
-func (c *LRU) ExpectInvariantsOk() {
+func (c *lru) ExpectInvariantsOk() {
 	var items int
 	for _, l := range c.queues {
 		l.ExpectInvariantsOk()

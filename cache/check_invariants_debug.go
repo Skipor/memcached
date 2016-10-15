@@ -37,7 +37,7 @@ func (q *queue) checkInvariants() {
 	Expect(actualSize).To(BeIdenticalTo(q.size))
 }
 
-func (c *LRU) checkInvariants() {
+func (c *lru) checkInvariants() {
 	var items int
 	for _, l := range c.queues {
 		l.checkInvariants()

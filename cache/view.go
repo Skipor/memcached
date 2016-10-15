@@ -15,6 +15,11 @@ type View interface {
 	NewDeleter(rawCommand []byte) Deleter
 }
 
+type Viewable interface {
+	Cache
+	View
+}
+
 type Getter interface {
 	Get(key ...[]byte) (readers []ItemView)
 }
