@@ -32,18 +32,16 @@ type Cache interface {
 	Delete(key []byte) (deleted bool)
 }
 
+type Viewable interface {
+	Cache
+	View
+}
+
 type Config struct {
 	Size int64
 }
 
-func NewCache(l log.Logger, conf Config) interface {
-	Cache
-	View
-} {
-	return newCache(l, conf)
-}
-
-func newCache(l log.Logger, conf Config) *cache {
+func NewCache(l log.Logger, conf Config) *cache {
 	c := &cache{
 		log:   l,
 		table: make(map[string]*node),
@@ -144,6 +142,22 @@ func (c *cache) get(keys ...[]byte) (views []ItemView) {
 				n.setActive()
 				views = append(views, n.NewView())
 			}
+		}
+	}
+	return
+}
+
+func (c *cache) Touch(keys ...[]byte) {
+	c.RLock()
+	defer c.RUnlock()
+	c.touch(keys...)
+}
+
+func (c *cache) touch(keys ...[]byte) {
+	c.log.Debugf("touch %s", keysPrinter{keys})
+	for _, key := range keys {
+		if n, ok := c.table[string(key)]; ok { // No allocation.
+			n.setActive()
 		}
 	}
 	return

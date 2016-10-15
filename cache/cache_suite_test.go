@@ -20,6 +20,25 @@ func TestCache(t *testing.T) {
 	RunSpecs(t, "Cache Suite")
 }
 
+func ExpectCachesToBeEquvalent(a, b *cache) {
+	a.ExpectInvariantsOk()
+	b.ExpectInvariantsOk()
+	for i, lru := range a.lrus {
+		ExpectLRUsToBeEqualent(lru, b.lrus[i])
+	}
+}
+
+func ExpectLRUsToBeEqualent(a, b *lru) {
+	Expect(a.size).To(Equal(b.size))
+	na, nb := a.head(), b.head()
+	for ; !(a.end(na) || b.end(nb)); na, nb = na.next, nb.next {
+		Expect(na.isActive()).To(Equal(nb.isActive()))
+		ExpectViewOfItem(nb.NewView(), na.Item)
+	}
+	Expect(a.end(na)).To(BeTrue())
+	Expect(b.end(nb)).To(BeTrue())
+}
+
 func ExpectViewOfItem(view ItemView, it Item) {
 	ExpectWithOffset(1, view.ItemMeta).To(BeIdenticalTo(it.ItemMeta))
 	itReader := it.NewView().Reader
@@ -93,6 +112,17 @@ type testPool struct{ *recycle.Pool }
 
 func newTestPool() testPool {
 	return testPool{recycle.NewPool()}
+}
+
+func (p testPool) randSizeItem() (i Item) {
+	return p.sizeItem(Rand.Intn(4 * testNodeSize))
+}
+func (p testPool) sizeItem(size int) (i Item) {
+	i.Key = testKey()
+	i.Exptime = nowUnix() + 100
+	i.Bytes = size
+	i.Data, _ = p.ReadData(Rand, i.Bytes)
+	return
 }
 
 func (p testPool) testItem() (i Item) {

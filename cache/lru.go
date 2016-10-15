@@ -92,10 +92,17 @@ func (l *lru) shrinkWhile(while func() bool, now int64) {
 	link(l.fakeHead, cur)
 }
 
-func (l *lru) head() *node      { return l.fakeHead.next }
-func (l *lru) tail() *node      { return l.fakeTail.prev }
-func (l *lru) end(n *node) bool { return n == l.fakeTail }
-func (l *lru) empty() bool      { return l.size == 0 }
+func (l *lru) head() *node { return l.fakeHead.next }
+func (l *lru) tail() *node { return l.fakeTail.prev }
+func (l *lru) end(n *node) bool {
+	if tag.Debug {
+		if n.owner != l {
+			panic("check end of not owned node")
+		}
+	}
+	return n == l.fakeTail
+}
+func (l *lru) empty() bool { return l.size == 0 }
 
 type node struct {
 	Item

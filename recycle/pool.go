@@ -20,6 +20,7 @@ var DefaultChunkSizes = func() (sz []int) {
 }()
 
 // TODO bench for performance and allocations. Single and concurrent.
+
 type Pool struct {
 	leakCallback LeakCallback
 	chunkSizes   []int

@@ -24,7 +24,7 @@ var _ = Describe("AOF write and sync", func() {
 		mflusher *mockFlusher
 	)
 	BeforeEach(func() {
-		Fuzz(&data)
+		data = make([]byte, Rand.Intn(1024)+1)
 		mfile = &mockFile{}
 		mflusher = &mockFlusher{}
 		mfile.On("Write", data).Return(len(data), nil)
@@ -43,6 +43,7 @@ var _ = Describe("AOF write and sync", func() {
 		mflusher.AssertExpectations(GinkgoT())
 	})
 	WriteData := func() {
+		By("data write")
 		t := aof.NewTransaction()
 		t.Write(data)
 		t.Close()

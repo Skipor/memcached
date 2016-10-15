@@ -40,7 +40,7 @@ var _ = Describe("Cache", func() {
 		}
 	})
 	JustBeforeEach(func() {
-		c = newCache(log.NewLogger(log.DebugLevel, GinkgoWriter), Config{})
+		c = NewCache(log.NewLogger(log.DebugLevel, GinkgoWriter), Config{})
 		c.limits = testLimits(hotWarmLimit)
 		if leak != nil {
 			p.SetLeakCallback(recycle.NotifyOnLeak(leak))
@@ -133,7 +133,6 @@ var _ = Describe("Cache", func() {
 
 		Context("delete", func() {
 			BESetHotWarmLimit(1)
-			// TODO get test
 			It("not found", func() {
 				c.Set(it[0])
 				deleted := c.Delete(Key(1))
