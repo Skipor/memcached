@@ -19,18 +19,14 @@ type lru struct {
 }
 
 func newLRU(l log.Logger, conf Config) *lru {
-	c := &lru{}
-	c.init(l, conf)
-	return c
-}
-
-func (c *lru) init(l log.Logger, conf Config) {
-	c.log = l
-	c.table = make(map[string]*node)
-	c.limits = limits{
-		total: conf.Size,
-		hot:   conf.Size * (hotCap * 100) / 100,
-		warm:  conf.Size * (warmCap * 100) / 100,
+	c := &lru{
+		log:   l,
+		table: make(map[string]*node),
+		limits: limits{
+			total: conf.Size,
+			hot:   conf.Size * (hotCap * 100) / 100,
+			warm:  conf.Size * (warmCap * 100) / 100,
+		},
 	}
 	for i := 0; i < temps; i++ {
 		queue := newQueue()
@@ -44,6 +40,7 @@ func (c *lru) init(l log.Logger, conf Config) {
 	c.hot().onInactive = moveTo(c.cold())
 	c.warm().onInactive = moveTo(c.cold())
 	c.cold().onInactive = c.onEvict
+	return c
 }
 
 type temp uint8

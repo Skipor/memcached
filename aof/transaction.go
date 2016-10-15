@@ -22,7 +22,7 @@ func (t *transaction) Close() (err error) {
 	if startRotate {
 		t.rotateInProcess = true
 	}
-	t.Unlock()
+	t.lock.Unlock()
 	if startRotate {
 		t.startRotate()
 	}

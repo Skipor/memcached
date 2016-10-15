@@ -30,7 +30,9 @@ type AOF struct {
 	config  Config
 	rotator Rotator
 	log     log.Logger
-	sync.Mutex
+
+	// lock protects fields bellow.
+	lock sync.Mutex
 	// writer is current proxy io.Writer to write AOF.
 	// It can be file, *bufio.Writer or another proxy.
 	writer io.Writer
@@ -114,7 +116,7 @@ func (f *AOF) Close() error {
 // Returned transaction hold AOF lock until close,
 // so callee should write data and close it, as soon as possible.
 func (f *AOF) NewTransaction() io.WriteCloser {
-	f.Lock()
+	f.lock.Lock()
 	return &transaction{f}
 }
 
@@ -141,7 +143,7 @@ func (f *AOF) startRotate() {
 		extra := &bytes.Buffer{}
 
 		// Take file snapshot.
-		f.Lock()
+		f.lock.Lock()
 		if f.rotateInProcess == false {
 			f.log.Panic("AOF rotation in process, but flag is not set.")
 		}
@@ -151,7 +153,7 @@ func (f *AOF) startRotate() {
 		oldWriter := f.writer
 		f.writer = io.MultiWriter(oldWriter, extra)
 		size := f.size
-		f.Unlock()
+		f.lock.Unlock()
 
 		afterFileSnapshotTestHook()
 
@@ -170,9 +172,9 @@ func (f *AOF) startRotate() {
 		newExtra := &bytes.Buffer{}
 
 		// Take extra written.
-		f.Lock()
+		f.lock.Lock()
 		f.writer = io.MultiWriter(oldWriter, newExtra)
-		f.Unlock()
+		f.lock.Unlock()
 
 		// Write extra.
 		_, err = extra.WriteTo(newFile)
@@ -184,7 +186,7 @@ func (f *AOF) startRotate() {
 		afterExtraWriteTestHook()
 
 		// Write newExtra, replace old with new.
-		f.Lock()
+		f.lock.Lock()
 		_, err = newExtra.WriteTo(newFile)
 		assertNoErr(err)
 
@@ -198,7 +200,7 @@ func (f *AOF) startRotate() {
 		err = f.init()
 		assertNoErr(err)
 		f.rotateInProcess = false
-		f.Unlock()
+		f.lock.Unlock()
 		f.log.Info("AOF rotation finished.")
 
 		afterFinishTestHook()
@@ -218,16 +220,16 @@ func (f *AOF) startSync() {
 		var prevSize int64
 		for {
 			_ = <-ticker.C
-			f.Lock()
+			f.lock.Lock()
 			if f.isClosed() {
-				f.Unlock()
+				f.lock.Unlock()
 				return
 			}
 			if f.size != prevSize {
 				prevSize = f.size
 				f.sync()
 			}
-			f.Unlock()
+			f.lock.Unlock()
 		}
 	}()
 }

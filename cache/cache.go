@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/skipor/memcached/log"
+	"github.com/skipor/memcached/recycle"
 )
 
 // Handler implementation must not retain key slices.
@@ -11,8 +12,8 @@ type Cache interface {
 	Set(i Item)
 	Delete(key []byte) (deleted bool)
 	// Get returns ItemReaders for keys that was found in cache.
-	// Readers can be nil, if no key was found.
-	Get(key ...[]byte) (readers []ItemView)
+	// views can be nil, if no key was found.
+	Get(key ...[]byte) (views []ItemView)
 	Touch(key ...[]byte)
 }
 
@@ -21,15 +22,11 @@ type Config struct {
 }
 
 func NewLRU(l log.Logger, conf Config) *LRU {
-	c := &LRU{}
-	c.init(l, conf)
-	return c
+	return &LRU{*newLRU(l, conf)}
 }
 
 func NewLockingLRU(l log.Logger, conf Config) *LockingLRU {
-	c := &LockingLRU{}
-	c.init(l, conf)
-	return c
+	return &LockingLRU{*newLRU(l, conf)}
 }
 
 // LRU is Cache with auto locking on Cache operations.
@@ -84,3 +81,13 @@ func (c *LockingLRU) Lock()    { c.lock.Lock() }
 func (c *LockingLRU) Unlock()  { c.lock.Unlock() }
 func (c *LockingLRU) RLock()   { c.lock.RLock() }
 func (c *LockingLRU) RUnlock() { c.lock.RUnlock() }
+
+func ReadLockingLRUSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) (c *LockingLRU, err error) {
+	var lru *lru
+	lru, err = readSnapshot(r, p, l, conf)
+	if err != nil {
+		return
+	}
+	c = &LockingLRU{*lru}
+	return
+}

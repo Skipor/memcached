@@ -21,7 +21,7 @@ type Viewable interface {
 }
 
 type Getter interface {
-	Get(key ...[]byte) (readers []ItemView)
+	Get(key ...[]byte) (views []ItemView)
 }
 type Setter interface {
 	Set(i Item)
