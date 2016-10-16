@@ -2,29 +2,27 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"net"
 	"os"
-	"reflect"
-	"strconv"
-	"strings"
 
+	"github.com/facebookgo/stackerr"
 	"github.com/skipor/memcached"
+	"github.com/skipor/memcached/cmd/memcached/config"
 	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/log"
 )
 
 func main() {
 	// TODO pprof monitoring on configurable port
-	conf := config()
+	conf := loadConfigOrDie()
 	s, err := memcached.NewServer(conf)
-	s.Log.Fatal("Can't start server:", err)
+	if err != nil {
+		s.Log.Fatal("Can't start server:", err)
+	}
 
-	s.Log.Info("Serve on %s.", s.Addr)
+	s.Log.Infof("Serve on %s.", s.Addr)
 	err = s.ListenAndServe()
 	s.Log.Fatal("Serve error: ", err)
 }
@@ -36,35 +34,17 @@ Config values merge rules:
 Options:
 `
 
-func DefaultInputConfig() *InputConfig {
-	return &InputConfig{
-		Port:           11211,
-		Host:           "",
-		LogDestination: "stderr",
-		LogLevel:       "info",
-		CacheSize:      "64m",
-		MaxItemSize:    "1m",
-	}
-}
-
-type InputConfig struct {
-	Port           int    `json:"port"`
-	Host           string `json:"host"`
-	LogDestination string `json:"log-destination"` // Stdout, stderr, or filepath.
-	LogLevel       string `json:"log-level"`
-	// Size values 10g, 128m, 1024k, 1000000b
-	CacheSize   string `json:"cache-size"`
-	MaxItemSize string `json:"max-item-size"`
-}
-
 // config parses command flags, reads config file if any, returns merged config.
 // Config values merge rules:
 // 1) config file value overrides default
 // 2) command line value overrides any
-func config() memcached.Config {
+func loadConfigOrDie() memcached.Config {
 	l := log.NewLogger(log.DebugLevel, os.Stderr)
 	flg := parseFlags()
-	fileConf := DefaultInputConfig()
+	if err := validateFlagConf(flg.Config); err != nil {
+		l.Fatal(err)
+	}
+	fileConf := config.Default()
 	if flg.ConfigPath != "" {
 		data, err := ioutil.ReadFile(flg.ConfigPath)
 		if err != nil {
@@ -76,49 +56,17 @@ func config() memcached.Config {
 		}
 	}
 	// TODO  validate that there is no AOF options without AOF file name
-	mergeConfigs(fileConf, &flg.InputConfig)
-	return parseConfig(l, fileConf)
-}
-
-//func validateConf(conf Config) error {
-//	confWithoutName := conf.AOF
-//	confWithoutName.Name = ""
-//	if conf.FixCorruptedAOF != true || util.IsZero(confWithoutName) {
-//		return stackerr.New("Persistence not enabled, but passed some persistence options.\n" +
-//			"Probably you want pass AOF name.")
-//	}
-//	return nil
-//}
-
-func parseConfig(l log.Logger, fileConf *InputConfig) memcached.Config {
-	parsed := memcached.Config{}
-	var err error
-	parsed.LogDestination, err = logDestination(fileConf.LogDestination)
+	config.Merge(fileConf, &flg.Config)
+	mconf, err := config.Parse(fileConf)
 	if err != nil {
-		l.Fatal("Log destination open error:", err)
+		l.Fatal(err)
 	}
-	parsed.Cache.Size, err = parseSize(fileConf.CacheSize)
-	if err != nil {
-		l.Fatal("Cache size parse error:", err)
-	}
-	parsed.MaxItemSize, err = parseSize(fileConf.MaxItemSize)
-	if err != nil {
-		l.Fatal("Max item size parse error:", err)
-	}
-	if parsed.MaxItemSize > memcached.MaxItemSize {
-		l.Fatal("Too large max item size.")
-	}
-	parsed.LogLevel, err = log.LevelFromString(fileConf.LogLevel)
-	if err != nil {
-		l.Fatal("Log level parse error: ", err)
-	}
-	parsed.Addr = net.JoinHostPort(fileConf.Host, strconv.Itoa(fileConf.Port))
-	return parsed
+	return mconf
 }
 
 type Flags struct {
 	ConfigPath string
-	InputConfig
+	config.Config
 }
 
 // NOTE: without "only stdlib" constraint I would
@@ -129,7 +77,7 @@ func parseFlags() Flags {
 	var f Flags
 	flag.StringVar(&f.ConfigPath, "config", "", "path to json config")
 
-	def := DefaultInputConfig()
+	def := config.Default()
 	usage := func(usage string, defVal interface{}) string {
 		if _, ok := defVal.(string); ok {
 			usage += fmt.Sprintf(" (default %q)", defVal)
@@ -144,76 +92,16 @@ func parseFlags() Flags {
 	flag.StringVar(&f.LogLevel, "log-level", "", usage("log level: debug, info, warn, error, fatal", def.LogLevel))
 	flag.StringVar(&f.CacheSize, "cache-size", "", usage("cache size: 2g, 64m", def.CacheSize))
 	flag.StringVar(&f.MaxItemSize, "max-item-size", "", usage("max item size: 10m, 1024k", def.MaxItemSize))
+	flag.StringVar(&f.AOF.Name, "aof-name", "", usage("Append Only File(AOF) name", def.AOF.Name))
+	flag.DurationVar(&f.AOF.Sync, "sync", 0, usage("AOF sync period", def.AOF.Sync))
+	flag.IntVar(&f.AOF.BufSize, "buf-size", 0, usage("AOF buffer size", def.AOF.BufSize))
+	flag.BoolVar(&f.AOF.FixCorrupted, "fix-corrupted", false, usage("truncate AOF to valid prefix, if it is possible.", def.AOF.FixCorrupted))
 	flag.Parse()
 	return f
 }
 
-func parseSize(s string) (size int64, err error) {
-	if len(s) < 2 {
-		err = errors.New("Invalid size format.")
-		return
-	}
-	sep := len(s) - 1
-	sizeStr := s[:sep]
-	exponentStr := s[sep:]
-	var exponent uint32
-	switch strings.ToLower(exponentStr) {
-	case "b":
-		exponent = 0
-	case "k":
-		exponent = 10
-	case "m":
-		exponent = 20
-	case "g":
-		exponent = 30
-	default:
-		err = errors.New("Invalid exponent. Only 'b', 'k', 'm', 'g' allowed.")
-		return
-	}
-	size, err = strconv.ParseInt(sizeStr, 10, 31)
-	if err != nil {
-		err = fmt.Errorf("Size parse error: %s", err)
-		return
-	}
-	size <<= exponent
-	return
-}
-
-func logDestination(dest string) (w io.Writer, err error) {
-	switch strings.ToLower(dest) {
-	case "stderr":
-		w = os.Stderr
-	case "stdout":
-		w = os.Stdout
-	default:
-		w, err = os.OpenFile(dest, os.O_APPEND|os.O_CREATE, 0)
-	}
-	return
-}
-
 // mergeConfigs overwrite def values with non zero override values
 // WARN: not recursive now.
-func mergeConfigs(def, override *InputConfig) {
-	defVal := reflect.ValueOf(def).Elem()
-	overrideVal := reflect.ValueOf(override).Elem()
-	for i, end := 0, defVal.NumField(); i < end; i++ {
-		overrideVal := overrideVal.Field(i)
-		if util.IsZeroVal(overrideVal) {
-			defVal.Field(i).Set(overrideVal)
-		}
-	}
-}
-
-func saveDefaultConf() {
-	data, err := json.Marshal(DefaultInputConfig())
-	if err != nil {
-		panic(err)
-	}
-	err = ioutil.WriteFile("./config.json", data, 0666)
-	if err != nil {
-		panic(err)
-	}
-}
 
 func init() {
 	flag.Usage = func() {
@@ -221,4 +109,15 @@ func init() {
 		fmt.Fprintf(os.Stderr, "%s", usage)
 		flag.PrintDefaults()
 	}
+}
+
+func validateFlagConf(flagConf config.Config) error {
+	if flagConf.AOF.Name != "" {
+		return nil
+	}
+	if !util.IsZero(flagConf) {
+		return stackerr.New("Persistence not enabled, but passed some persistence options.\n" +
+			"Probably you want pass AOF name.")
+	}
+	return nil
 }

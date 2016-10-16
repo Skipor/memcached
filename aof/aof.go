@@ -22,7 +22,7 @@ type Config struct {
 	Name       string
 	SyncPeriod time.Duration
 	RotateSize int64 // AOF size, after which Rotator will be called.
-	BuffSize   int   // 0 if no buffering.
+	BufSize    int   // 0 if no buffering.
 }
 
 // AOF represents Append Only File.
@@ -79,12 +79,12 @@ func (f *AOF) init() (err error) {
 	f.size = stat.Size()
 	f.file = file
 
-	if f.config.BuffSize == 0 {
+	if f.config.BufSize == 0 {
 		f.writer = file
 		f.flusher = nopFlusher{}
 		return
 	}
-	bufWriter := bufio.NewWriterSize(f.file, f.config.BuffSize)
+	bufWriter := bufio.NewWriterSize(f.file, f.config.BufSize)
 	f.writer = bufWriter
 	f.flusher = bufWriter
 	f.log.Debug("AOF opened.")

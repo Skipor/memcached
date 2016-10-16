@@ -116,7 +116,7 @@ var _ = Describe("AOF init", func() {
 			RotateSize: rotateSize,
 		}
 		writeNum = Rand.Intn(5)
-		conf.BuffSize = Rand.Intn(oneWriteLimit * 2)
+		conf.BufSize = Rand.Intn(oneWriteLimit * 2)
 	})
 	AfterEach(func() {
 		err := os.Remove(filename)
@@ -152,7 +152,7 @@ var _ = Describe("AOF init", func() {
 			initialData.Write(data)
 			err := ioutil.WriteFile(filename, data, Perm)
 			Expect(err).To(BeNil())
-			conf.BuffSize = 10 * oneWriteLimit
+			conf.BufSize = 10 * oneWriteLimit
 		})
 		It("", func() {
 			WriteSomeData()
@@ -196,10 +196,10 @@ var _ = Describe("AOF rotation", func() {
 	}
 	It("rotation ok", func(done Done) {
 		const RotationSize = 4 * (1 << 10)
-		const BuffSize = (1 << 10)
+		const BufSize = (1 << 10)
 		initial = make([]byte, Rand.Intn(RotationSize-10))
 		io.ReadFull(Rand, initial)
-		beforeFileSnapshot = make([]byte, RotationSize+1-len(initial)+Rand.Intn(BuffSize))
+		beforeFileSnapshot = make([]byte, RotationSize+1-len(initial)+Rand.Intn(BufSize))
 		rotated = make([]byte, Rand.Intn(int(RotationSize*(MinRotateCompress*100))/100))
 		Fuzz(&afterFileSnapshot)
 		Fuzz(&afterExtraWrite)
@@ -222,7 +222,7 @@ var _ = Describe("AOF rotation", func() {
 		Expect(err).To(BeNil())
 		conf := Config{
 			Name:       filename,
-			BuffSize:   BuffSize,
+			BufSize:    BufSize,
 			RotateSize: RotationSize,
 		}
 
