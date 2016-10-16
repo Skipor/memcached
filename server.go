@@ -75,9 +75,6 @@ func NewServer(conf Config) (s *Server, err error) {
 		onStop: onStop,
 	}
 	l.Debugf("Config: %#v", conf)
-	if tag.Debug {
-		l.Warn("Using debug build. It has more runtime checks and large perfomance overhead.")
-	}
 	return
 }
 

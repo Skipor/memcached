@@ -109,6 +109,13 @@ func (f *AOF) isClosed() bool {
 }
 
 func (f *AOF) Close() error {
+	f.lock.Lock()
+	err := f.close()
+	f.lock.Unlock()
+	return err
+}
+
+func (f *AOF) close() error {
 	f.flusher.Flush()
 	err := f.file.Close()
 	f.file = nil // Mark as closed.
@@ -193,7 +200,7 @@ func (f *AOF) startRotate() {
 		_, err = newExtra.WriteTo(newFile)
 		assertNoErr(err)
 
-		err = f.Close()
+		err = f.close()
 		assertNoErr(err)
 		err = newFile.Close()
 		assertNoErr(err)

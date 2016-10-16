@@ -19,7 +19,9 @@ import (
 	"github.com/skipor/memcached/log"
 )
 
-func Parse(conf *Config) (mconf memcached.Config, err error) {
+const RotateSizeCoef = 3 //TODO make configurable
+
+func Parse(conf Config) (mconf memcached.Config, err error) {
 	mconf.LogDestination, err = logDestination(conf.LogDestination)
 	if err != nil {
 		err = stackerr.Newf("Log destination open error: %v", err)
@@ -44,6 +46,16 @@ func Parse(conf *Config) (mconf memcached.Config, err error) {
 		err = stackerr.Newf("Log level parse error: %v", err)
 		return
 	}
+	mconf.AOF.Name = conf.AOF.Name
+	mconf.FixCorruptedAOF = conf.AOF.FixCorrupted
+	var bufSize int64
+	bufSize, err = parseSize(conf.AOF.BufSize)
+	mconf.AOF.BufSize = int(bufSize)
+	if err != nil {
+		err = stackerr.Newf("BufSize parse error: %v", err)
+		return
+	}
+	mconf.AOF.RotateSize = mconf.Cache.Size * RotateSizeCoef
 	mconf.Addr = net.JoinHostPort(conf.Host, strconv.Itoa(conf.Port))
 	return
 }
@@ -57,30 +69,38 @@ func Default() *Config {
 		CacheSize:      "64m",
 		MaxItemSize:    "1m",
 		AOF: AOFConfig{
-			BufSize: 4 * (1 << 10),
+			BufSize: "4k",
 		},
 	}
 }
 
 type Config struct {
-	Port           int    `json:"port"`
-	Host           string `json:"host"`
-	LogDestination string `json:"log-destination"` // Stdout, stderr, or filepath.
-	LogLevel       string `json:"log-level"`
+	Port           int    `json:"port,omitempty"`
+	Host           string `json:"host,omitempty"`
+	LogDestination string `json:"log-destination,omitempty"` // Stdout, stderr, or filepath.
+	LogLevel       string `json:"log-level,omitempty"`
 	// Size values 10g, 128m, 1024k, 1000000b
-	CacheSize   string    `json:"cache-size"`
-	MaxItemSize string    `json:"max-item-size"`
-	AOF         AOFConfig `json:"aof"`
+	CacheSize   string    `json:"cache-size,omitempty"`
+	MaxItemSize string    `json:"max-item-size,omitempty"`
+	AOF         AOFConfig `json:"aof,omitempty"`
 }
 
 type AOFConfig struct {
-	Name         string        `json:"name"`
-	Sync         time.Duration `json:"sync"`
-	BufSize      int           `json:"buf-size"`
-	FixCorrupted bool          `json:"fix-corrupted"`
+	Name         string        `json:"name,omitempty"`
+	Sync         time.Duration `json:"sync,omitempty"`
+	BufSize      string        `json:"buf-size,omitempty"`
+	FixCorrupted bool          `json:"fix-corrupted,omitempty"`
 }
 
 func Merge(def, override *Config) {
+	defAof := def.AOF
+	merge(def, override)
+
+	// HACK: manual recursion. Some third party high level reflection package should be used here.
+	merge(&defAof, &override.AOF)
+	def.AOF = defAof
+}
+func merge(def, override interface{}) {
 	defVal := reflect.ValueOf(def).Elem()
 	overrideVal := reflect.ValueOf(override).Elem()
 	for i, end := 0, defVal.NumField(); i < end; i++ {

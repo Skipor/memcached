@@ -10,6 +10,7 @@ import (
 	"github.com/facebookgo/stackerr"
 	"github.com/skipor/memcached"
 	"github.com/skipor/memcached/cmd/memcached/config"
+	"github.com/skipor/memcached/internal/tag"
 	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/log"
 )
@@ -21,7 +22,12 @@ func main() {
 	if err != nil {
 		s.Log.Fatal("Can't start server:", err)
 	}
-
+	if tag.Debug {
+		s.Log.Warn("Using debug build. It has more runtime checks and large perfomance overhead.")
+	}
+	if tag.Race {
+		s.Log.Info("Race detector is on.")
+	}
 	s.Log.Infof("Serve on %s.", s.Addr)
 	err = s.ListenAndServe()
 	s.Log.Fatal("Serve error: ", err)
@@ -41,10 +47,12 @@ Options:
 func loadConfigOrDie() memcached.Config {
 	l := log.NewLogger(log.DebugLevel, os.Stderr)
 	flg := parseFlags()
+	//l.Debugf("Flag config: %#v\n", flg)
 	if err := validateFlagConf(flg.Config); err != nil {
 		l.Fatal(err)
 	}
 	fileConf := config.Default()
+
 	if flg.ConfigPath != "" {
 		data, err := ioutil.ReadFile(flg.ConfigPath)
 		if err != nil {
@@ -55,9 +63,9 @@ func loadConfigOrDie() memcached.Config {
 			l.Fatal("Config parse error: ", err)
 		}
 	}
-	// TODO  validate that there is no AOF options without AOF file name
+
 	config.Merge(fileConf, &flg.Config)
-	mconf, err := config.Parse(fileConf)
+	mconf, err := config.Parse(*fileConf)
 	if err != nil {
 		l.Fatal(err)
 	}
@@ -94,7 +102,7 @@ func parseFlags() Flags {
 	flag.StringVar(&f.MaxItemSize, "max-item-size", "", usage("max item size: 10m, 1024k", def.MaxItemSize))
 	flag.StringVar(&f.AOF.Name, "aof-name", "", usage("Append Only File(AOF) name", def.AOF.Name))
 	flag.DurationVar(&f.AOF.Sync, "sync", 0, usage("AOF sync period", def.AOF.Sync))
-	flag.IntVar(&f.AOF.BufSize, "buf-size", 0, usage("AOF buffer size", def.AOF.BufSize))
+	flag.StringVar(&f.AOF.BufSize, "buf-size", "", usage("AOF buffer size", def.AOF.BufSize))
 	flag.BoolVar(&f.AOF.FixCorrupted, "fix-corrupted", false, usage("truncate AOF to valid prefix, if it is possible.", def.AOF.FixCorrupted))
 	flag.Parse()
 	return f
@@ -115,7 +123,7 @@ func validateFlagConf(flagConf config.Config) error {
 	if flagConf.AOF.Name != "" {
 		return nil
 	}
-	if !util.IsZero(flagConf) {
+	if !util.IsZero(flagConf.AOF) {
 		return stackerr.New("Persistence not enabled, but passed some persistence options.\n" +
 			"Probably you want pass AOF name.")
 	}

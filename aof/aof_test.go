@@ -167,7 +167,6 @@ var _ = Describe("AOF init", func() {
 })
 
 var _ = Describe("AOF rotation", func() {
-	AfterEach(resetTestHooks)
 	var (
 		initial            []byte
 		beforeFileSnapshot []byte
@@ -194,6 +193,7 @@ var _ = Describe("AOF rotation", func() {
 		t.Write(p)
 		t.Close()
 	}
+	AfterEach(resetTestHooks)
 	It("rotation ok", func(done Done) {
 		const RotationSize = 4 * (1 << 10)
 		const BufSize = (1 << 10)
@@ -211,8 +211,10 @@ var _ = Describe("AOF rotation", func() {
 		finish := &sync.WaitGroup{}
 		finish.Add(1)
 		afterFinishTestHook = func() {
+			By("after finish hook")
 			Write(afterFinish)
 			finish.Done()
+			By("after finish done")
 		}
 		expectedData := bytes.Join([][]byte{rotated, afterFileSnapshot, afterExtraWrite, afterFinish}, nil)
 
@@ -226,6 +228,7 @@ var _ = Describe("AOF rotation", func() {
 			RotateSize: RotationSize,
 		}
 
+		By("open aof")
 		aof, err = Open(log.NewLogger(log.DebugLevel, GinkgoWriter), mRotator, conf)
 		Expect(err).To(BeNil())
 
@@ -234,11 +237,15 @@ var _ = Describe("AOF rotation", func() {
 		Expect(aof.rotateInProcess).To(BeFalse())
 		Write(beforeFileSnapshot[sep:])
 
+		By("wait for finish")
 		finish.Wait()
+		By("finished")
 
 		Expect(aof.size).To(BeEquivalentTo(len(expectedData)))
 		Expect(aof.rotateInProcess).To(BeFalse())
+		By("closing aof")
 		err = aof.Close()
+		By("aof closed")
 		Expect(err).To(BeNil())
 		actual, err := ioutil.ReadFile(filename)
 		Expect(err).To(BeNil())

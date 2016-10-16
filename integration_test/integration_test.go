@@ -1,118 +1,155 @@
 package integration
 
 import (
-	"net"
+	"io/ioutil"
+	"os"
+	"os/exec"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gexec"
 
 	"github.com/skipor/memcached"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/log"
+	"github.com/skipor/memcached/cmd/memcached/config"
+	"github.com/skipor/memcached/internal/tag"
+	"github.com/skipor/memcached/internal/util"
+	"github.com/skipor/memcached/testutil"
 )
 
 var _ = Describe("Integration", func() {
-	const cacheSize = 64 * (1 << 20)
-	// Should not use debug in race detector tests - debug logging add many "happens before" relations,
-	// because of locking output.
-	const logLevel = log.InfoLevel
-	//const logLevel = log.DebugLevel
+	BeforeEach(func() {
+		if tag.Race {
+			Skip("Integration is not running under race detector.")
+		}
+	})
+	const SessionWaitTime = 3 * time.Second
 	var (
-		addr = memcached.DefaultAddr
-		l    log.Logger
-		s    *memcached.Server
-		stop chan struct{}
-		c    *memcache.Client
-		err  error
+		confFile   string
+		inConf     config.Config    // App config to run.
+		serverConf memcached.Config // Parsed config. Read only.
+
+		session *Session
 	)
 	BeforeEach(func() {
-		l = log.NewLogger(logLevel, GinkgoWriter)
-		ResetTestKeys()
-		stop = make(chan struct{})
-		s = &memcached.Server{
-			Addr: addr,
-			Log:  l,
+		confFile = testutil.TmpFileName()
+		inConf = *config.Default() // Sometimes we want to know defaults.
+		inConf.LogLevel = "debug"
+		serverConf = memcached.Config{}
+
+	})
+	JustBeforeEach(func() {
+		if !util.IsZero(serverConf) {
+			Fail("Test should set inConf fields,  not serverConfig fields. ")
 		}
-		localCache := cache.NewLRU(l, cache.Config{Size: cacheSize})
-		s.NewCacheView = func() cache.View { return localCache }
-		go func() {
-			err := s.ListenAndServe()
-			Expect(err).To(BeIdenticalTo(memcached.ErrStoped))
-			close(stop)
-		}()
-		ServerListening := func() bool {
-			conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
-			if err != nil {
-				l.Warn("Server not listening: ", err)
-				return false
-			}
-			conn.Close()
-			return true
-		}
-		Eventually(ServerListening).Should(BeTrue())
 		var err error
-		c = memcache.New(addr)
-		Expect(err).To(BeNil())
+		serverConf, err = config.Parse(inConf)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = ioutil.WriteFile(confFile, config.Marshal(&inConf), 0600)
+		Expect(err).NotTo(HaveOccurred())
+		command := exec.Command(MemcachedCLI, "-config", confFile)
+		session, err = Start(command, GinkgoWriter, GinkgoWriter)
+		Expect(err).ToNot(HaveOccurred(), "%v", err)
+		time.Sleep(50 * time.Millisecond) // Wait for output.
 	})
 	AfterEach(func() {
-		s.Stop()
-		Eventually(stop).Should(BeClosed())
-	})
-	It("get what set", func() {
-		set := RandSizeItem()
-		err = c.Set(set)
-		Expect(err).To(BeNil())
-		get, err := c.Get(set.Key)
-		Expect(err).To(BeNil())
-		ExpectItemsEqual(get, set)
+		session.Terminate().Wait()
 	})
 
-	It("overwrite", func() {
-		set := RandSizeItem()
-		overwrite := RandSizeItem()
-		overwrite.Key = set.Key
-		err = c.Set(set)
-		Expect(err).To(BeNil())
-		err = c.Set(overwrite)
-		Expect(err).To(BeNil())
-
-		get, err := c.Get(set.Key)
-		Expect(err).To(BeNil())
-		ExpectItemsEqual(get, overwrite)
-	})
-
-	It("delete", func() {
-		set := RandSizeItem()
-		err = c.Set(set)
-		Expect(err).To(BeNil())
-
-		err = c.Delete(set.Key)
-		_, err = c.Get(set.Key)
-		Expect(err).To(Equal(memcache.ErrCacheMiss))
-	})
-
-	It("multi get", func() {
-		var keys []string
-		items := map[string]*memcache.Item{}
-		for i := 0; i < 10; i++ {
-			i := RandSizeItem()
-			keys = append(keys, i.Key)
-			items[i.Key] = i
-			err = c.Set(i)
+	Context("simple requests", func() {
+		var (
+			c   *memcache.Client
+			err error
+		)
+		JustBeforeEach(func() {
+			c = memcache.New(serverConf.Addr)
+		})
+		It("get what set", func() {
+			set := RandSizeItem()
+			err = c.Set(set)
 			Expect(err).To(BeNil())
-		}
-		gotItems, err := c.GetMulti(keys)
-		Expect(err).To(BeNil())
-		Expect(len(gotItems)).To(Equal(len(items)))
-		for k, v := range gotItems {
-			ExpectItemsEqual(v, items[k])
-		}
+			get, err := c.Get(set.Key)
+			Expect(err).To(BeNil())
+			ExpectItemsEqual(get, set)
+		})
+
+		It("overwrite", func() {
+			set := RandSizeItem()
+			overwrite := RandSizeItem()
+			overwrite.Key = set.Key
+			err = c.Set(set)
+			Expect(err).To(BeNil())
+			err = c.Set(overwrite)
+			Expect(err).To(BeNil())
+
+			get, err := c.Get(set.Key)
+			Expect(err).To(BeNil())
+			ExpectItemsEqual(get, overwrite)
+		})
+
+		It("delete", func() {
+			set := RandSizeItem()
+			err = c.Set(set)
+			Expect(err).To(BeNil())
+
+			err = c.Delete(set.Key)
+			_, err = c.Get(set.Key)
+			Expect(err).To(Equal(memcache.ErrCacheMiss))
+		})
+
+		It("multi get", func() {
+			var keys []string
+			items := map[string]*memcache.Item{}
+			for i := 0; i < 10; i++ {
+				i := RandSizeItem()
+				keys = append(keys, i.Key)
+				items[i.Key] = i
+				err = c.Set(i)
+				Expect(err).To(BeNil())
+			}
+			gotItems, err := c.GetMulti(keys)
+			Expect(err).To(BeNil())
+			Expect(len(gotItems)).To(Equal(len(items)))
+			for k, v := range gotItems {
+				ExpectItemsEqual(v, items[k])
+			}
+		})
+		Context("load", func() {
+			BeforeEach(func() {
+				inConf.LogLevel = "info" // Too large debug output.
+			})
+
+			It("", func() {
+				LoadTest(serverConf.Addr)
+			})
+		})
+
 	})
-	Context("load", func() {
-		It("", func() {
-			LoadTest(addr)
+
+	It("not handle termination without persistence", func() {
+		session.Terminate().Wait()
+		Expect(session).To(Exit(143))
+	})
+
+	Context("persistence on", func() {
+		var inAOF *config.AOFConfig //shortcut
+		BeforeEach(func() {
+			inAOF = &inConf.AOF
+			inAOF.Name = testutil.TmpFileName()
+		})
+		AfterEach(func() {
+			os.Remove(inAOF.Name)
+		})
+
+		It("handle terminate", func() {
+			session.Terminate().Wait(SessionWaitTime)
+			Expect(session).To(Exit(0))
+		})
+		It("handle interrupt", func() {
+			session.Interrupt().Wait(SessionWaitTime)
+			Expect(session).To(Exit(0))
 		})
 	})
 })

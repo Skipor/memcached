@@ -20,7 +20,7 @@ import (
 	. "github.com/skipor/memcached/testutil"
 )
 
-const ReadTimeout = 0.2
+const ReadTimeout = 1
 
 type Out struct {
 	buf *Buffer
