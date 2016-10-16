@@ -82,7 +82,7 @@ func (c *lru) set(i Item) {
 		i.Data.Recycle()
 		return
 	}
-	c.log.Debugf("Add item %s.", i.Key)
+	c.log.Debugf("Add %s.", i.Key)
 	n = newNode(i)
 	c.table[i.Key] = n
 	c.queues[hot].push(n)
@@ -102,7 +102,7 @@ func (c *lru) set(i Item) {
 }
 
 func (c *lru) get(keys ...[]byte) (views []ItemView) {
-	c.log.Debugf("get %s", keysPrinter{keys})
+	c.log.Debugf("Get %s", keysPrinter{keys})
 	now := time.Now().Unix()
 	for _, key := range keys {
 		if n, ok := c.table[string(key)]; ok { // No allocation.
@@ -116,7 +116,7 @@ func (c *lru) get(keys ...[]byte) (views []ItemView) {
 }
 
 func (c *lru) touch(keys ...[]byte) {
-	c.log.Debugf("touch %s", keysPrinter{keys})
+	c.log.Debugf("Touch %s", keysPrinter{keys})
 	for _, key := range keys {
 		if n, ok := c.table[string(key)]; ok { // No allocation.
 			n.setActive()
@@ -127,6 +127,7 @@ func (c *lru) touch(keys ...[]byte) {
 
 func (c *lru) delete(key []byte) (deleted bool) {
 	defer c.checkInvariants()
+	c.log.Debugf("Delete %s", key)
 	n, ok := c.table[string(key)] // No allocation.
 	if !ok {
 		return false

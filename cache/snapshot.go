@@ -9,11 +9,16 @@ import (
 
 	"github.com/facebookgo/stackerr"
 
+	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/log"
 	"github.com/skipor/memcached/recycle"
 )
 
-var ErrCacheOverflow = errors.New("readed cache doesn't larger than provided size: some data lost")
+var errCacheOverflow = errors.New("readed cache is larger than provided size: some data lost")
+
+func IsCacheOverflow(err error) bool {
+	return util.Unwrap(err) == errCacheOverflow
+}
 
 type SnapshotReader interface {
 	io.Reader
@@ -67,7 +72,7 @@ func readSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) 
 		}
 	}
 	if c.hotOverflow() || c.warmOverflow() || c.totalOverflow() {
-		err = ErrCacheOverflow
+		err = stackerr.Wrap(errCacheOverflow)
 		c.fixOverflows()
 	}
 	c.checkInvariants()

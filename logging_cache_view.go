@@ -5,8 +5,17 @@ import (
 	"github.com/skipor/memcached/cache"
 )
 
-func NewLoggingCacheView(c cache.RWCache, aof *aof.AOF) *LoggingCacheView {
-	return &LoggingCacheView{
+type logginCacheViewFabric struct {
+	c   cache.RWCache
+	aof *aof.AOF
+}
+
+func (f logginCacheViewFabric) New() cache.View {
+	return newLoggingCacheView(f.c, f.aof)
+}
+
+func newLoggingCacheView(c cache.RWCache, aof *aof.AOF) *loggingCacheView {
+	return &loggingCacheView{
 		cache: c,
 		aof:   aof,
 	}
@@ -29,42 +38,42 @@ func NewLoggingCacheView(c cache.RWCache, aof *aof.AOF) *LoggingCacheView {
 // will be logged in same order as applied to cache.
 // Releasing cache lock before logging allows apply another cache operation
 // while logging in process.
-type LoggingCacheView struct {
+type loggingCacheView struct {
 	cache   cache.RWCache
 	aof     *aof.AOF
 	rawCopy []byte // rawCopy is buffer for data which should be copied.
 }
 
-var _ cache.View = (*LoggingCacheView)(nil)
+var _ cache.View = (*loggingCacheView)(nil)
 
-func (v *LoggingCacheView) NewGetter(raw []byte) cache.Getter {
+func (v *loggingCacheView) NewGetter(raw []byte) cache.Getter {
 	return &lcvOperation{
-		LoggingCacheView: v,
+		loggingCacheView: v,
 		raw:              raw,
 	}
 }
 
-func (v *LoggingCacheView) NewSetter(raw []byte) cache.Setter {
+func (v *loggingCacheView) NewSetter(raw []byte) cache.Setter {
 	if v.rawCopy == nil {
 		v.rawCopy = make([]byte, 0, len(raw))
 	}
 	v.rawCopy = append(v.rawCopy[:0], raw...)
 	o := &lcvOperation{
-		LoggingCacheView: v,
+		loggingCacheView: v,
 		raw:              v.rawCopy,
 	}
 	return o
 }
 
-func (v *LoggingCacheView) NewDeleter(raw []byte) cache.Deleter {
+func (v *loggingCacheView) NewDeleter(raw []byte) cache.Deleter {
 	return &lcvOperation{
-		LoggingCacheView: v,
+		loggingCacheView: v,
 		raw:              raw,
 	}
 }
 
 type lcvOperation struct {
-	*LoggingCacheView
+	*loggingCacheView
 	raw []byte
 }
 
@@ -89,7 +98,7 @@ func (o *lcvOperation) Get(keys ...[]byte) (views []cache.ItemView) {
 
 	// One use only.
 	o.raw = nil
-	o.LoggingCacheView = nil
+	o.loggingCacheView = nil
 	return
 }
 
@@ -115,7 +124,7 @@ func (o *lcvOperation) Set(i cache.Item) {
 
 	itemReader.Close()
 	o.raw = nil
-	o.LoggingCacheView = nil
+	o.loggingCacheView = nil
 	return
 
 }
@@ -132,6 +141,6 @@ func (o *lcvOperation) Delete(key []byte) (deleted bool) {
 	assertNoErr(err)
 
 	o.raw = nil
-	o.LoggingCacheView = nil
+	o.loggingCacheView = nil
 	return
 }

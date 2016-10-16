@@ -7,6 +7,7 @@ import (
 
 	"github.com/facebookgo/stackerr"
 	"github.com/skipor/memcached/cache"
+	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/log"
 )
 
@@ -14,17 +15,17 @@ type conn struct {
 	reader
 	*bufio.Writer
 	closer io.Closer
-	*ConnMeta
+	*connMeta
 	log   log.Logger
 	cache cache.View
 }
 
-func newConn(l log.Logger, m *ConnMeta, cache cache.View, rwc io.ReadWriteCloser) *conn {
+func newConn(l log.Logger, m *connMeta, cache cache.View, rwc io.ReadWriteCloser) *conn {
 	return &conn{
 		reader:   newReader(rwc, m.Pool),
 		Writer:   bufio.NewWriterSize(rwc, OutBufferSize),
 		closer:   rwc,
-		ConnMeta: m,
+		connMeta: m,
 		log:      l,
 		cache:    cache,
 	}
@@ -187,13 +188,13 @@ func (c *conn) serverError(err error) {
 	if err == io.ErrUnexpectedEOF {
 		return
 	}
-	err = unwrap(err)
+	err = util.Unwrap(err)
 	c.sendResponse(fmt.Sprintf("%s %s", ServerErrorResponse, err))
 }
 
 func (c *conn) sendClientError(err error) error {
 	c.log.Error("Client error: ", err)
-	err = unwrap(err)
+	err = util.Unwrap(err)
 	return c.sendResponse(fmt.Sprintf("%s %s", ClientErrorResponse, err))
 }
 

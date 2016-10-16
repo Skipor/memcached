@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/log"
 	"github.com/skipor/memcached/recycle"
 	. "github.com/skipor/memcached/testutil"
@@ -179,7 +180,8 @@ var _ = Describe("Snapshot", func() {
 		})
 		It("ErrCacheOverflow", func() {
 			DoRead()
-			Expect(err).To(BeIdenticalTo(ErrCacheOverflow))
+			Expect(IsCacheOverflow(err)).To(BeTrue())
+			Expect(util.Unwrap(err)).To(BeIdenticalTo(errCacheOverflow))
 		})
 		It("equalent to fixed overflows", func() {
 			DoRead()

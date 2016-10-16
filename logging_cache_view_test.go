@@ -16,10 +16,10 @@ import (
 	"github.com/skipor/memcached/testutil"
 )
 
-var _ = FDescribe("LoggingTestView", func() {
+var _ = Describe("LoggingTestView", func() {
 	var (
 		filename string
-		v        *LoggingCacheView
+		v        *loggingCacheView
 		AOF      *aof.AOF
 		mcache   *cachemocks.Cache
 		err      error
@@ -41,7 +41,7 @@ var _ = FDescribe("LoggingTestView", func() {
 			RotateSize: 1 << 20,
 		})
 		Expect(err).To(BeNil(), "%s", err)
-		v = NewLoggingCacheView(mcache, AOF)
+		v = newLoggingCacheView(mcache, AOF)
 
 	})
 	AfterEach(func() {

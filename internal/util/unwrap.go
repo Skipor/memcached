@@ -1,6 +1,6 @@
-package memcached
+package util
 
-func unwrap(err error) error {
+func Unwrap(err error) error {
 	type hasUnderlying interface {
 		Underlying() error
 	}

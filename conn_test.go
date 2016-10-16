@@ -62,7 +62,7 @@ func (o *Out) expectChunk(ch []byte) {
 
 var _ = Describe("Conn", func() {
 	var (
-		connMeta      *ConnMeta
+		cMeta         *connMeta
 		mcache        *cachemocks.Cache
 		c             *conn
 		out           *Out
@@ -75,14 +75,14 @@ var _ = Describe("Conn", func() {
 		mcache = &cachemocks.Cache{}
 		var connReader *io.PipeReader
 		connReader, in = io.Pipe()
-		connMeta = &ConnMeta{}
-		connMeta.init()
+		cMeta = &connMeta{}
+		cMeta.init()
 		rwc := struct {
 			io.ReadCloser
 			io.Writer
 		}{connReader, out.buf}
 		l := log.NewLogger(log.DebugLevel, GinkgoWriter)
-		c = newConn(l, connMeta, mcache, rwc)
+		c = newConn(l, cMeta, mcache, rwc)
 		go func() {
 			defer GinkgoRecover()
 			c.serve()
@@ -165,7 +165,7 @@ var _ = Describe("Conn", func() {
 			meta.Key = "test_key"
 			meta.Exptime = Rand.Int63n(time.Now().Unix()) + MaxRelativeExptime
 			meta.Flags = Rand.Uint32()
-			meta.Bytes = Rand.Intn(connMeta.MaxItemSize)
+			meta.Bytes = Rand.Intn(cMeta.MaxItemSize)
 		})
 		AfterEach(func() { noreply = false })
 
@@ -195,7 +195,7 @@ var _ = Describe("Conn", func() {
 			AssertSay(StoredPattern)
 		})
 		Context("too large item", func() {
-			BeforeEach(func() { meta.Bytes = connMeta.MaxItemSize + 1 })
+			BeforeEach(func() { meta.Bytes = cMeta.MaxItemSize + 1 })
 			JustBeforeEach(func() {
 				// cache.Cache.Set should not be called.
 				mcache.ExpectedCalls = nil
@@ -215,7 +215,7 @@ var _ = Describe("Conn", func() {
 
 		BeforeEach(func() {
 			leak = make(chan *recycle.Data)
-			connMeta.Pool.SetLeakCallback(recycle.NotifyOnLeak(leak))
+			cMeta.Pool.SetLeakCallback(recycle.NotifyOnLeak(leak))
 		})
 		AfterEach(func() {
 			kn = 0
@@ -248,9 +248,9 @@ var _ = Describe("Conn", func() {
 					Key:     string(keys[i]),
 					Exptime: Rand.Int63n(DefaultMaxItemSize),
 					Flags:   Rand.Uint32(),
-					Bytes:   Rand.Intn(connMeta.MaxItemSize),
+					Bytes:   Rand.Intn(cMeta.MaxItemSize),
 				}
-				data, _ := connMeta.Pool.ReadData(FastRand, meta.Bytes)
+				data, _ := cMeta.Pool.ReadData(FastRand, meta.Bytes)
 				items = append(items, &cache.Item{
 					ItemMeta: meta,
 					Data:     data,

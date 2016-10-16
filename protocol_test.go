@@ -16,6 +16,7 @@ import (
 
 	"github.com/skipor/memcached/cache"
 	"github.com/skipor/memcached/internal/mocks"
+	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/recycle"
 	. "github.com/skipor/memcached/testutil"
 )
@@ -50,7 +51,7 @@ var _ = Describe("reader", func() {
 	}
 	ExpectReadCmdErr := func(expectedErr error) {
 		ReadCmd()
-		Expect(unwrap(err)).To(Equal(expectedErr))
+		Expect(util.Unwrap(err)).To(Equal(expectedErr))
 		Expect(command).To(BeNil())
 		Expect(fields).To(BeNil())
 	}
@@ -105,7 +106,7 @@ var _ = Describe("reader", func() {
 	})
 	ExpectEOF := func() {
 		ReadCmd()
-		Expect(unwrap(err)).To(Equal(io.EOF))
+		Expect(util.Unwrap(err)).To(Equal(io.EOF))
 		Expect(clientErr).To(BeNil())
 		Expect(command).To(BeNil())
 		Expect(fields).To(BeNil())
@@ -181,7 +182,7 @@ var _ = Describe("reader", func() {
 					input.WriteString(Separator)
 				})
 				It("got read err", func() {
-					Expect(unwrap(err)).To(Equal(io.ErrUnexpectedEOF))
+					Expect(util.Unwrap(err)).To(Equal(io.ErrUnexpectedEOF))
 					Expect(data).To(BeNil())
 				})
 			})
@@ -195,7 +196,7 @@ var _ = Describe("reader", func() {
 					input.WriteString(Separator)
 				})
 				It("got client err", func() {
-					Expect(unwrap(clientErr)).To(Equal(ErrInvalidLineSeparator))
+					Expect(util.Unwrap(clientErr)).To(Equal(ErrInvalidLineSeparator))
 					Expect(err).To(BeNil())
 					Expect(data).To(BeNil())
 				})
@@ -272,7 +273,7 @@ var _ = Describe("reader", func() {
 				if clientErr != nil {
 					By("Got error: " + clientErr.Error())
 				}
-				Expect(unwrap(clientErr)).To(Equal(expectedClientErr))
+				Expect(util.Unwrap(clientErr)).To(Equal(expectedClientErr))
 				Expect(err).To(BeNil())
 				ExpectCommandReaded()
 				ExpectEOF()
@@ -348,7 +349,7 @@ var _ = Describe("parse key fields", func() {
 
 	AssertErr := func(expectedErr error) {
 		It("expected error", func() {
-			Expect(unwrap(err)).To(Equal(expectedErr))
+			Expect(util.Unwrap(err)).To(Equal(expectedErr))
 		})
 	}
 
@@ -439,7 +440,7 @@ var _ = Describe("parse set fields", func() {
 
 	AssertErr := func(expectedErr error) {
 		It("expected error", func() {
-			Expect(unwrap(err)).To(Equal(expectedErr))
+			Expect(util.Unwrap(err)).To(Equal(expectedErr))
 		})
 	}
 

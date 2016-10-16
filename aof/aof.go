@@ -48,13 +48,13 @@ func Open(log log.Logger, r Rotator, conf Config) (aof *AOF, err error) {
 	if r == nil {
 		panic("nil rotator")
 	}
+	if conf.RotateSize == 0 {
+		panic("zero rotate size")
+	}
 	aof = &AOF{
 		log:     log,
 		rotator: r,
 		config:  conf,
-	}
-	if conf.RotateSize == 0 {
-		panic("zero rotate size")
 	}
 	err = aof.init()
 	if err != nil {

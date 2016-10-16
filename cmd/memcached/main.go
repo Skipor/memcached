@@ -14,11 +14,38 @@ import (
 	"strings"
 
 	"github.com/skipor/memcached"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/internal/tag"
+	"github.com/skipor/memcached/internal/util"
 	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
 )
+
+func main() {
+	// TODO pprof monitoring on configurable port
+	conf := config()
+	s, err := memcached.NewServer(conf)
+	s.Log.Fatal("Can't start server:", err)
+
+	s.Log.Info("Serve on %s.", s.Addr)
+	err = s.ListenAndServe()
+	s.Log.Fatal("Serve error: ", err)
+}
+
+const usage = `
+Config values merge rules:
+1) config file value overrides default
+2) command line value overrides any
+Options:
+`
+
+func DefaultInputConfig() *InputConfig {
+	return &InputConfig{
+		Port:           11211,
+		Host:           "",
+		LogDestination: "stderr",
+		LogLevel:       "info",
+		CacheSize:      "64m",
+		MaxItemSize:    "1m",
+	}
+}
 
 type InputConfig struct {
 	Port           int    `json:"port"`
@@ -30,70 +57,11 @@ type InputConfig struct {
 	MaxItemSize string `json:"max-item-size"`
 }
 
-func DefaultInputConfig() *InputConfig {
-	return &InputConfig{
-		Port:           11211,
-		Host:           "",
-		LogDestination: "stderr",
-		LogLevel:       "info",
-		CacheSize:      "64m",
-		MaxItemSize:    "1m",
-	}
-
-}
-
-const usage = `
-Config values merge rules:
-1) config file value overrides default
-2) command line value overrides any
-Options:
-`
-
-func init() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "%s", usage)
-		flag.PrintDefaults()
-	}
-}
-
-type Config struct {
-	Addr           string
-	LogDestination io.Writer
-	LogLevel       log.Level
-	CacheSize      int64
-	MaxItemSize    int64
-}
-
-func main() {
-	// TODO pprof monitoring on configurable port
-	conf := config()
-	l := log.NewLogger(conf.LogLevel, conf.LogDestination)
-	c := cache.NewLRU(l, cache.Config{Size: conf.CacheSize})
-	s := &memcached.Server{
-		Addr:         conf.Addr,
-		Log:          l,
-		NewCacheView: func() cache.View { return c },
-		ConnMeta: memcached.ConnMeta{
-			Pool:        recycle.NewPool(),
-			MaxItemSize: int(conf.MaxItemSize),
-		},
-	}
-	l.Debugf("Config: %#v", conf)
-	if tag.Debug {
-		l.Warn("Using debug build. It has more runtime checks and large perfomance overhead.")
-	}
-
-	l.Info("Serve on %s.", s.Addr)
-	err := s.ListenAndServe()
-	l.Fatal("Serve error: ", err)
-}
-
 // config parses command flags, reads config file if any, returns merged config.
 // Config values merge rules:
 // 1) config file value overrides default
 // 2) command line value overrides any
-func config() *Config {
+func config() memcached.Config {
 	l := log.NewLogger(log.DebugLevel, os.Stderr)
 	flg := parseFlags()
 	fileConf := DefaultInputConfig()
@@ -107,18 +75,29 @@ func config() *Config {
 			l.Fatal("Config parse error: ", err)
 		}
 	}
+	// TODO  validate that there is no AOF options without AOF file name
 	mergeConfigs(fileConf, &flg.InputConfig)
 	return parseConfig(l, fileConf)
 }
 
-func parseConfig(l log.Logger, fileConf *InputConfig) *Config {
-	parsed := &Config{}
+//func validateConf(conf Config) error {
+//	confWithoutName := conf.AOF
+//	confWithoutName.Name = ""
+//	if conf.FixCorruptedAOF != true || util.IsZero(confWithoutName) {
+//		return stackerr.New("Persistence not enabled, but passed some persistence options.\n" +
+//			"Probably you want pass AOF name.")
+//	}
+//	return nil
+//}
+
+func parseConfig(l log.Logger, fileConf *InputConfig) memcached.Config {
+	parsed := memcached.Config{}
 	var err error
 	parsed.LogDestination, err = logDestination(fileConf.LogDestination)
 	if err != nil {
 		l.Fatal("Log destination open error:", err)
 	}
-	parsed.CacheSize, err = parseSize(fileConf.CacheSize)
+	parsed.Cache.Size, err = parseSize(fileConf.CacheSize)
 	if err != nil {
 		l.Fatal("Cache size parse error:", err)
 	}
@@ -213,13 +192,13 @@ func logDestination(dest string) (w io.Writer, err error) {
 }
 
 // mergeConfigs overwrite def values with non zero override values
+// WARN: not recursive now.
 func mergeConfigs(def, override *InputConfig) {
 	defVal := reflect.ValueOf(def).Elem()
 	overrideVal := reflect.ValueOf(override).Elem()
 	for i, end := 0, defVal.NumField(); i < end; i++ {
 		overrideVal := overrideVal.Field(i)
-		isZeroVal := overrideVal.Interface() == reflect.Zero(overrideVal.Type()).Interface()
-		if !isZeroVal {
+		if util.IsZeroVal(overrideVal) {
 			defVal.Field(i).Set(overrideVal)
 		}
 	}
@@ -233,5 +212,13 @@ func saveDefaultConf() {
 	err = ioutil.WriteFile("./config.json", data, 0666)
 	if err != nil {
 		panic(err)
+	}
+}
+
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "%s", usage)
+		flag.PrintDefaults()
 	}
 }

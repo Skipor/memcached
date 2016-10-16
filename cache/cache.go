@@ -82,10 +82,12 @@ func (c *LockingLRU) Unlock()  { c.lock.Unlock() }
 func (c *LockingLRU) RLock()   { c.lock.RLock() }
 func (c *LockingLRU) RUnlock() { c.lock.RUnlock() }
 
+func (c *LockingLRU) Snapshot() *Snapshot { return c.snapshot() }
+
 func ReadLockingLRUSnapshot(r SnapshotReader, p *recycle.Pool, l log.Logger, conf Config) (c *LockingLRU, err error) {
 	var lru *lru
 	lru, err = readSnapshot(r, p, l, conf)
-	if err != nil {
+	if err != nil && !IsCacheOverflow(err) {
 		return
 	}
 	c = &LockingLRU{*lru}
