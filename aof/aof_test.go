@@ -50,7 +50,7 @@ var _ = Describe("AOF write and sync", func() {
 	}
 
 	It("sync period less than min", func() {
-		aof.config.SyncPeriod = MinSyncPeriod - 1
+		aof.config.Sync = MinSyncPeriod - 1
 		Expect(aof.isSyncEveryTransaction()).To(BeTrue())
 		mfile.On("Sync").Return(func() error {
 			return nil
@@ -68,7 +68,7 @@ var _ = Describe("AOF write and sync", func() {
 
 	It("background sync", func() {
 		const syncPeriod = MinSyncPeriod
-		aof.config.SyncPeriod = syncPeriod
+		aof.config.Sync = syncPeriod
 		Expect(aof.isSyncEveryTransaction()).To(BeFalse())
 		onSync := make(chan struct{})
 		mfile.On("Sync").Return(func() error {

@@ -46,8 +46,9 @@ func Parse(conf Config) (mconf memcached.Config, err error) {
 		err = stackerr.Newf("Log level parse error: %v", err)
 		return
 	}
-	mconf.AOF.Name = conf.AOF.Name
 	mconf.FixCorruptedAOF = conf.AOF.FixCorrupted
+	mconf.AOF.Sync = conf.AOF.Sync
+	mconf.AOF.Name = conf.AOF.Name
 	var bufSize int64
 	bufSize, err = parseSize(conf.AOF.BufSize)
 	mconf.AOF.BufSize = int(bufSize)

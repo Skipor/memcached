@@ -20,7 +20,7 @@ func main() {
 	conf := loadConfigOrDie()
 	s, err := memcached.NewServer(conf)
 	if err != nil {
-		s.Log.Fatal("Can't start server:", err)
+		log.NewLogger(log.FatalLevel, os.Stderr).Fatal("Can't start server: ", err)
 	}
 	if tag.Debug {
 		s.Log.Warn("Using debug build. It has more runtime checks and large perfomance overhead.")
@@ -46,6 +46,7 @@ Options:
 // 2) command line value overrides any
 func loadConfigOrDie() memcached.Config {
 	l := log.NewLogger(log.DebugLevel, os.Stderr)
+	l.Debug("Memcached server start.\n\n")
 	flg := parseFlags()
 	//l.Debugf("Flag config: %#v\n", flg)
 	if err := validateFlagConf(flg.Config); err != nil {
@@ -64,7 +65,9 @@ func loadConfigOrDie() memcached.Config {
 		}
 	}
 
+	//l.Debugf("File config BEFORE merge: %#v\n", fileConf)
 	config.Merge(fileConf, &flg.Config)
+	//l.Debugf("File config AFTER merge: %#v\n", fileConf)
 	mconf, err := config.Parse(*fileConf)
 	if err != nil {
 		l.Fatal(err)

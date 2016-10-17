@@ -20,7 +20,7 @@ const Perm = 0664 // TODO make configurable.
 
 type Config struct {
 	Name       string
-	SyncPeriod time.Duration
+	Sync       time.Duration
 	RotateSize int64 // AOF size, after which Rotator will be called.
 	BufSize    int   // 0 if no buffering.
 }
@@ -92,7 +92,7 @@ func (f *AOF) init() (err error) {
 }
 
 func (f *AOF) isSyncEveryTransaction() bool {
-	return f.config.SyncPeriod < MinSyncPeriod
+	return f.config.Sync < MinSyncPeriod
 }
 
 func (f *AOF) sync() (err error) {
@@ -186,6 +186,7 @@ func (f *AOF) startRotate() {
 		f.writer = io.MultiWriter(oldWriter, newExtra)
 		f.lock.Unlock()
 
+		extraSize := extra.Len()
 		// Write extra.
 		_, err = extra.WriteTo(newFile)
 		assertNoErr(err)
@@ -197,6 +198,7 @@ func (f *AOF) startRotate() {
 
 		// Write newExtra, replace old with new.
 		f.lock.Lock()
+		newExtraSize := newExtra.Len()
 		_, err = newExtra.WriteTo(newFile)
 		assertNoErr(err)
 
@@ -207,12 +209,18 @@ func (f *AOF) startRotate() {
 
 		err = os.Rename(newFileName, f.config.Name) // Atomic. No data corruption on fail.
 		assertNoErr(err)
+
+		sizeWas := f.size
 		err = f.init()
 		assertNoErr(err)
+		sizeIs := f.size
+
 		f.rotateInProcess = false
 		f.lock.Unlock()
-		f.log.Info("AOF rotation finished.")
 
+		f.log.Infof("AOF rotation finished. Size was %v, become %v.\n"+
+			"Extra log while rotated: %v.\n"+
+			"NewExtraLog while write extra: %v", sizeWas, sizeIs, extraSize, newExtraSize)
 		afterFinishTestHook()
 	}()
 }
@@ -225,7 +233,7 @@ var (
 
 func (f *AOF) startSync() {
 	go func() {
-		ticker := time.NewTicker(f.config.SyncPeriod)
+		ticker := time.NewTicker(f.config.Sync)
 		defer ticker.Stop()
 		var prevSize int64
 		for {

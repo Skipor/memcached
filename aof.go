@@ -26,8 +26,10 @@ func newLoggingCacheViewFabric(l log.Logger, p *recycle.Pool, conf Config) (f *l
 		if cerr, ok := err.(*CorruptedError); ok {
 			err = stackerr.Newf("AOF is corrupted, but can be truncated to valid: %v\n"+
 				"Pass fix-corrupted option or chose anoter AOF.", cerr.Err)
+			return
 		}
-		stackerr.Newf("AOF can't be read: %v", err)
+		err = stackerr.Newf("AOF can't be read: %v", err)
+		return
 	}
 
 	rotator := aof.RotatorFunc(func(_ aof.ROFile, w io.Writer) error {
@@ -73,6 +75,7 @@ func readAOF(p *recycle.Pool, l log.Logger, conf Config) (c *cache.LockingLRU, e
 		err = stackerr.Wrap(err)
 		return
 	}
+	l.Info("AOF is founded.")
 	defer f.Close()
 	cr := newCountingReader(f, p)
 	c, err = readSnapshotIfAny(cr.reader, l, conf.Cache)
@@ -86,6 +89,7 @@ func readAOF(p *recycle.Pool, l log.Logger, conf Config) (c *cache.LockingLRU, e
 	var lastValidPos int64
 	lastValidPos, err = readCommandLog(cr, c)
 	if err != nil {
+		l.Debug("AOF is corrupted.")
 		if !conf.FixCorruptedAOF {
 			err = &CorruptedError{err}
 			return
