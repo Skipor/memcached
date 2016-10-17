@@ -9,10 +9,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/Skipor/memcached"
+	. "github.com/Skipor/memcached/testutil"
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/onsi/gomega/gexec"
-	"github.com/skipor/memcached"
-	. "github.com/skipor/memcached/testutil"
 )
 
 var MemcachedCLI string
@@ -27,7 +27,7 @@ var _ = BeforeSuite(func() {
 	if os.Getenv("MEMCACHED_DEBUG") != "" {
 		args = append(args, "-tags debug")
 	}
-	MemcachedCLI, err = gexec.Build("github.com/skipor/memcached/cmd/memcached", args...)
+	MemcachedCLI, err = gexec.Build("github.com/Skipor/memcached/cmd/memcached", args...)
 	Expect(err).NotTo(HaveOccurred())
 })
 

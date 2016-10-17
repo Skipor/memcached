@@ -9,9 +9,9 @@ import (
 
 	"github.com/facebookgo/stackerr"
 
-	"github.com/skipor/memcached/internal/util"
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
+	"github.com/Skipor/memcached/internal/util"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
 )
 
 var errCacheOverflow = errors.New("readed cache is larger than provided size: some data lost")

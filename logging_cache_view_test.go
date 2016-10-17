@@ -9,11 +9,11 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/skipor/memcached/aof"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/cache/cachemocks"
-	"github.com/skipor/memcached/recycle"
-	"github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/aof"
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/cache/cachemocks"
+	"github.com/Skipor/memcached/recycle"
+	"github.com/Skipor/memcached/testutil"
 )
 
 var _ = Describe("LoggingTestView", func() {

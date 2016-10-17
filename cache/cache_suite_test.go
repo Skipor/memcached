@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 
-	"github.com/skipor/memcached/recycle"
-	. "github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/recycle"
+	. "github.com/Skipor/memcached/testutil"
 )
 
 func TestCache(t *testing.T) {

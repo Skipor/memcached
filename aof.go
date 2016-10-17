@@ -8,11 +8,11 @@ import (
 
 	"github.com/facebookgo/stackerr"
 
-	"github.com/skipor/memcached/aof"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/internal/util"
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
+	"github.com/Skipor/memcached/aof"
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/internal/util"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
 )
 
 // SnapshotCommand indicate that there is cache snapshot after it.

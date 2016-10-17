@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/skipor/memcached/log"
-	. "github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/log"
+	. "github.com/Skipor/memcached/testutil"
 )
 
 var _ = Describe("AOF write and sync", func() {

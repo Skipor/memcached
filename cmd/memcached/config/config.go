@@ -14,9 +14,9 @@ import (
 
 	"github.com/facebookgo/stackerr"
 
-	"github.com/skipor/memcached"
-	"github.com/skipor/memcached/internal/util"
-	"github.com/skipor/memcached/log"
+	"github.com/Skipor/memcached"
+	"github.com/Skipor/memcached/internal/util"
+	"github.com/Skipor/memcached/log"
 )
 
 const RotateSizeCoef = 3 //TODO make configurable

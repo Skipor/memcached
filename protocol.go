@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/recycle"
 	"github.com/facebookgo/stackerr"
 	"github.com/pkg/errors"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/recycle"
 )
 
 const (

@@ -3,8 +3,8 @@ package cache
 import (
 	"sync"
 
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
 )
 
 // Handler implementation must not retain key slices.

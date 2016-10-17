@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/skipor/memcached/internal/tag"
+	"github.com/Skipor/memcached/internal/tag"
 )
 
 const (

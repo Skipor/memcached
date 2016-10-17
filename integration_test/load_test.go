@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/rcrowley/go-metrics"
 
-	"github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/testutil"
 )
 
 func IsTemporary(err error) bool {

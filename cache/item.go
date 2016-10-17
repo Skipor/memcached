@@ -3,7 +3,7 @@ package cache
 import (
 	"fmt"
 
-	"github.com/skipor/memcached/recycle"
+	"github.com/Skipor/memcached/recycle"
 )
 
 type Item struct {

@@ -8,11 +8,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/skipor/memcached/aof"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
-	. "github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/aof"
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
+	. "github.com/Skipor/memcached/testutil"
 )
 
 var _ = Describe("cache aof", func() {

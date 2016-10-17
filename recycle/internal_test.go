@@ -12,9 +12,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/skipor/memcached/internal/mocks"
-	"github.com/skipor/memcached/internal/tag"
-	. "github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/internal/mocks"
+	"github.com/Skipor/memcached/internal/tag"
+	. "github.com/Skipor/memcached/testutil"
 )
 
 var _ = Describe("Pool create", func() {

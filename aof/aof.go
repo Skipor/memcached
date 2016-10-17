@@ -11,7 +11,7 @@ import (
 
 	"github.com/facebookgo/stackerr"
 
-	"github.com/skipor/memcached/log"
+	"github.com/Skipor/memcached/log"
 )
 
 const MinSyncPeriod = 100 * time.Millisecond

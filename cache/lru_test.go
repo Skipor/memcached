@@ -6,8 +6,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
 )
 
 func testLimits(n int64) limits {

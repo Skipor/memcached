@@ -6,10 +6,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/skipor/memcached/internal/util"
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
-	. "github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/internal/util"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
+	. "github.com/Skipor/memcached/testutil"
 )
 
 var _ = Describe("Snapshot", func() {

@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skipor/memcached/aof"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/internal/tag"
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
+	"github.com/Skipor/memcached/aof"
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/internal/tag"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
 )
 
 const DefaultAddr = ":11211"

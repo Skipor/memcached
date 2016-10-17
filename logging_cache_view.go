@@ -1,8 +1,8 @@
 package memcached
 
 import (
-	"github.com/skipor/memcached/aof"
-	"github.com/skipor/memcached/cache"
+	"github.com/Skipor/memcached/aof"
+	"github.com/Skipor/memcached/cache"
 )
 
 type logginCacheViewFabric struct {

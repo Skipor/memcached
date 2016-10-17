@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/internal/util"
+	"github.com/Skipor/memcached/log"
 	"github.com/facebookgo/stackerr"
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/internal/util"
-	"github.com/skipor/memcached/log"
 )
 
 type conn struct {

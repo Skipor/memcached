@@ -13,11 +13,11 @@ import (
 	. "github.com/onsi/gomega/gbytes"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/skipor/memcached/cache"
-	"github.com/skipor/memcached/cache/cachemocks"
-	"github.com/skipor/memcached/log"
-	"github.com/skipor/memcached/recycle"
-	. "github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached/cache"
+	"github.com/Skipor/memcached/cache/cachemocks"
+	"github.com/Skipor/memcached/log"
+	"github.com/Skipor/memcached/recycle"
+	. "github.com/Skipor/memcached/testutil"
 )
 
 const ReadTimeout = 1

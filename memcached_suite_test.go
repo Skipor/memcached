@@ -5,9 +5,9 @@ import (
 	"io/ioutil"
 	"testing"
 
+	. "github.com/Skipor/memcached/testutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "github.com/skipor/memcached/testutil"
 )
 
 func TestMemcached(t *testing.T) {

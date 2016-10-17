@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skipor/memcached/internal/tag"
-	"github.com/skipor/memcached/log"
+	"github.com/Skipor/memcached/internal/tag"
+	"github.com/Skipor/memcached/log"
 )
 
 type lru struct {

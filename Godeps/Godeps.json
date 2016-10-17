@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/skipor/memcached",
+	"ImportPath": "github.com/Skipor/memcached",
 	"GoVersion": "go1.7",
 	"GodepVersion": "v74",
 	"Packages": [

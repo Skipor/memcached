@@ -11,11 +11,11 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 
-	"github.com/skipor/memcached"
-	"github.com/skipor/memcached/cmd/memcached/config"
-	"github.com/skipor/memcached/internal/tag"
-	"github.com/skipor/memcached/internal/util"
-	"github.com/skipor/memcached/testutil"
+	"github.com/Skipor/memcached"
+	"github.com/Skipor/memcached/cmd/memcached/config"
+	"github.com/Skipor/memcached/internal/tag"
+	"github.com/Skipor/memcached/internal/util"
+	"github.com/Skipor/memcached/testutil"
 )
 
 var _ = Describe("Integration", func() {
