@@ -2,6 +2,14 @@
 Simple memcached server. 
 [![Build Status](https://api.travis-ci.org/Skipor/memcached.svg)](https://travis-ci.org/Skipor/memcached)  [![GoDoc](https://godoc.org/github.com/Skipor/memcached?status.svg)](https://godoc.org/github.com/Skipor/memcached)  [![codecov](https://codecov.io/gh/Skipor/memcached/branch/master/graph/badge.svg)](https://codecov.io/gh/Skipor/memcached)
 
+###Usage
+`go get github.com/Skipor/memcached/cmd/memcached`
+`memcached --help` for all options
+`memcached` to start server on default port
+`memcached -aof-name ./memcached.aof` to start server with AOF persistence on
+`memcached -aof-name ./memcached.aof -sync 2s` sync log not on every command, but every passed period
+
+
 ## Features
 
 * No third party packages for app, server and cache logic.
