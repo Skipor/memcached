@@ -1,5 +1,6 @@
 # memcached
 Simple memcached server. Test task for working in VK.
+[![Build Status](https://api.travis-ci.org/Skipor/memcached.svg)](https://travis-ci.org/skipor/memcached)
 
 
 ## TODO
