@@ -62,7 +62,7 @@ func (o *Out) expectChunk(ch []byte) {
 
 var _ = Describe("Conn", func() {
 	var (
-		cMeta         *connMeta
+		cMeta         *ConnMeta
 		mcache        *cachemocks.Cache
 		c             *conn
 		out           *Out
@@ -75,7 +75,7 @@ var _ = Describe("Conn", func() {
 		mcache = &cachemocks.Cache{}
 		var connReader *io.PipeReader
 		connReader, in = io.Pipe()
-		cMeta = &connMeta{}
+		cMeta = &ConnMeta{}
 		cMeta.init()
 		rwc := struct {
 			io.ReadCloser

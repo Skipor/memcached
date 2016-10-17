@@ -68,7 +68,7 @@ func NewServer(conf Config) (s *Server, err error) {
 		Addr:         conf.Addr,
 		Log:          l,
 		NewCacheView: newCacheView,
-		connMeta: connMeta{
+		ConnMeta: ConnMeta{
 			Pool:        p,
 			MaxItemSize: int(conf.MaxItemSize),
 		},
@@ -81,7 +81,7 @@ func NewServer(conf Config) (s *Server, err error) {
 // Server serves memcached text protocol over tcp.
 // Only Cache field is required, other have reasonable defaults.
 type Server struct {
-	connMeta
+	ConnMeta
 	Addr         string
 	Log          log.Logger
 	NewCacheView func() cache.View
@@ -94,7 +94,7 @@ type Server struct {
 }
 
 // connMeta is data shared between connections.
-type connMeta struct {
+type ConnMeta struct {
 	Pool        *recycle.Pool
 	MaxItemSize int
 }
@@ -178,7 +178,7 @@ func (s *Server) isStoped() bool {
 func (s *Server) newConn(c net.Conn) *conn {
 	conn := newConn(
 		s.Log.WithFields(log.Fields{"conn": s.connCounter}),
-		&s.connMeta,
+		&s.ConnMeta,
 		s.NewCacheView(),
 		c,
 	)
@@ -191,7 +191,7 @@ func (s *Server) init() {
 	if s.Log == nil {
 		s.Log = log.NewLogger(log.ErrorLevel, os.Stderr)
 	}
-	s.connMeta.init()
+	s.ConnMeta.init()
 	if s.NewCacheView == nil {
 		s.Log.Panic("No cache fabric provided.")
 	}
@@ -207,7 +207,7 @@ func (s *Server) init() {
 	}
 }
 
-func (m *connMeta) init() {
+func (m *ConnMeta) init() {
 	if m.Pool == nil {
 		m.Pool = recycle.NewPool()
 	}

@@ -6,3 +6,9 @@
 *.iml
 .idea
 out/
+
+#VIM
+*~
+
+#GO
+*.coverprofile

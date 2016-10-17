@@ -1,10 +1,10 @@
 GINKGO=ginkgo -r
-GINKGO_OPTIONS=-v -keepGoing  --randomizeAllSpecs --randomizeSuites --failOnPending  --trace --progress --slowSpecThreshold=1
+GINKGO_OPTIONS=-v -keepGoing  --randomizeAllSpecs --randomizeSuites --failOnPending  --trace --progress --slowSpecThreshold=1 --cover
 BUILD=go build
 BUILD_OPTIONS= -o ./out/memcached ./cmd/memcached
 
 
-all: test-race test-no-race-specific integration-race
+all: test integration
 
 test: 
 	$(GINKGO)  $(GINKGO_OPTIONS) -skipPackage=integration 

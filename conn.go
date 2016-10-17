@@ -15,17 +15,17 @@ type conn struct {
 	reader
 	*bufio.Writer
 	closer io.Closer
-	*connMeta
+	*ConnMeta
 	log   log.Logger
 	cache cache.View
 }
 
-func newConn(l log.Logger, m *connMeta, cache cache.View, rwc io.ReadWriteCloser) *conn {
+func newConn(l log.Logger, m *ConnMeta, cache cache.View, rwc io.ReadWriteCloser) *conn {
 	return &conn{
 		reader:   newReader(rwc, m.Pool),
 		Writer:   bufio.NewWriterSize(rwc, OutBufferSize),
 		closer:   rwc,
-		connMeta: m,
+		ConnMeta: m,
 		log:      l,
 		cache:    cache,
 	}
